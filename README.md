@@ -5,9 +5,11 @@
 
 <b>This is the <i>prototype</i> for the <i>CamShield</i> and created by <i>Bytecraft</i> for CodeNection 2025</b>
 
-And the track is track <u>Campus Management</u> 
+And the track is track 3:  <u>Campus Management</u> 
 
-Problem statement is that the Campus safety App, that the current safety infrastructure often lacks comprehensive coverage, real-time responsiveness, and accessibility features that address the diverse needs of the campus community, leaving gaps in protection and support
+Problem statement is that the <b>Campus safety App</b> :
+
+that the current safety infrastructure often lacks comprehensive coverage, real-time responsiveness, and accessibility features that address the diverse needs of the campus community, leaving gaps in protection and support
 
 And we are here to build an app that offer students and staff create a safe study space that is responsive and meets the diverse needs of a campus community by ensuring the app is accessible to all.
 
