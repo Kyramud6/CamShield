@@ -19,6 +19,7 @@ Team member of Bytecraft
 2. Lai Kian Siong
 3. Tang Sinny
 </b>
+And we are all from <i>INTI International University</i>
 
 If y'all curious and want to know more, here the link for the pitch video 
 
