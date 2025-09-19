@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CamSHIELD Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .header {
+      background: rgba(229, 255, 248, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 25px;
+      padding: 15px 30px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo-icon {
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(45deg, #4CAF50, #2196F3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+
+    .logo-text .shield {
+      color: #4CAF50;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(76, 175, 80, 0.1);
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: 2px solid #4CAF50;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      background: #4CAF50;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+    }
+
+    .status-text {
+      color: #2c3e50;
+      font-weight: 600;
+    }
+
+    .time {
+      color: #34495e;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: rgba(242, 255, 252, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 30px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--accent-color);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .card.custom-marker {
+      --accent-color: #4CAF50;
+    }
+
+    .card.fire-emergency {
+      --accent-color: #f44336;
+    }
+
+    .card.post-incident {
+      --accent-color: #2196F3;
+    }
+
+    .card.companion-request {
+      --accent-color: #00BCD4;
+    }
+
+    .card.fire-alerts {
+      --accent-color: #FF5722;
+    }
+
+    .card.sos-alerts {
+      --accent-color: #FF9800;
+    }
+
+    .card-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+      color: white;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    .card-subtitle {
+      color: #7f8c8d;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--accent-color);
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .bottom-section {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 20px;
+      margin-left: -20px;
+      margin-right: -20px;
+      padding: 0 20px;
+    }
+
+    .section-card {
+      background: rgba(229, 255, 248, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 25px;
+      padding: 25px 30px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    .section-card.active {
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid #4CAF50;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(76, 175, 80, 0.3);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+      min-height: 60px;
+    }
+
+    .section-icon {
+      width: 55px;
+      height: 55px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .section-info {
+      flex: 1;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+
+    .section-subtitle {
+      color: #7f8c8d;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .expand-indicator {
+      font-size: 18px;
+      color: #7f8c8d;
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+      margin-right: 20px;
+      font-weight: bold;
+    }
+
+    .section-card.active .expand-indicator {
+      transform: rotate(180deg);
+      color: #4CAF50;
+    }
+
+    .control-icons {
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .control-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 16px;
+    }
+
+    .control-icon:hover {
+      background: rgba(0, 0, 0, 0.15);
+      transform: scale(1.05);
+    }
+
+    .section-content {
+      height: 0;
+      overflow: hidden;
+      transition: all 0.4s ease;
+      margin-top: 0;
+      opacity: 0;
+    }
+
+    .section-content.expanded {
+      height: 450px;
+      margin-top: 25px;
+      opacity: 1;
+    }
+
+    .section-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .iframe-container {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      height: 600px;
+      margin-top: 20px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 15px;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .section-header {
+        gap: 15px;
+      }
+      
+      .section-content.expanded {
+        height: 350px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      .header {
+        flex-direction: column;
+        gap: 15px;
+      }
+      
+      .section-header {
+        gap: 10px;
+      }
+      
+      .section-content.expanded {
+        height: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">CS</div>
+      <div class="logo-text">Cam<span class="shield">SHIELD</span></div>
+    </div>
+    <div class="status">
+      <span class="status-text">Status: Online</span>
+      <div class="status-dot"></div>
+    </div>
+    <div class="time" id="currentTime">18:30</div>
+  </div>
+
+  <div class="dashboard-grid">
+    <div class="card custom-marker" onclick="loadPage('CustomMarker.html')">
+      <div class="card-icon" style="background: #4CAF50;">📍</div>
+      <div class="card-title">Custom Marker</div>
+      <div class="card-subtitle">Add custom location markers</div>
+    </div>
+
+    <div class="card fire-emergency" onclick="loadPage('FireEmergency.html')">
+      <div class="card-icon" style="background: #f44336;">🚨</div>
+      <div class="card-title">Fire Emergency</div>
+      <div class="card-subtitle">Emergency fire response</div>
+    </div>
+
+    <div class="card post-incident" onclick="loadPage('IncidentReport.html')">
+      <div class="card-icon" style="background: #2196F3;">📋</div>
+      <div class="card-title">Post Incident</div>
+      <div class="card-subtitle">Report and manage incidents</div>
+    </div>
+
+    <div class="card companion-request" onclick="loadPage('CompanionRequest.html')">
+      <div class="card-icon" style="background: #00BCD4;">👥</div>
+      <div class="card-title">Companion Request</div>
+      <div class="card-subtitle">Request assistance</div>
+      <div class="notification-badge">1</div>
+    </div>
+
+    <div class="card fire-alerts" onclick="loadPage('ActiveAlerts.html')">
+      <div class="card-icon" style="background: #FF5722;">🔥</div>
+      <div class="card-title">Fire Alerts</div>
+      <div class="card-subtitle">Active fire notifications</div>
+      <div class="notification-badge">1</div>
+    </div>
+
+    <div class="card sos-alerts" onclick="loadPage('SOSAlerts.html')">
+      <div class="card-icon" style="background: #FF9800;">🆘</div>
+      <div class="card-title">SOS Alerts</div>
+      <div class="card-subtitle">Emergency SOS signals</div>
+      <div class="notification-badge">1</div>
+    </div>
+  </div>
+
+  <div class="bottom-section">
+    <div class="section-card" onclick="toggleSection('liveCampusMap', 'CustomMarker.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #FF6B6B, #4ECDC4);">🗺️</div>
+        <div class="section-info">
+          <div class="section-title">Live Campus Map</div>
+          <div class="section-subtitle">Real-time campus monitoring</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        <div class="control-icons">
+          <div class="control-icon">🔄</div>
+          <div class="control-icon">⛶</div>
+        </div>
+      </div>
+      <div class="section-content" id="liveCampusMapContent">
+        <iframe class="section-iframe" id="liveCampusMapFrame" src=""></iframe>
+      </div>
+    </div>
+
+    <div class="section-card" onclick="toggleSection('activeAlerts', 'ActiveAlerts.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #FFA726, #FF7043);">⚠️</div>
+        <div class="section-info">
+          <div class="section-title">Active Alerts</div>
+          <div class="section-subtitle">Current system alerts</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        <div class="control-icons">
+          <div class="control-icon">🔄</div>
+          <div class="control-icon">⛶</div>
+        </div>
+      </div>
+      <div class="section-content" id="activeAlertsContent">
+        <iframe class="section-iframe" id="activeAlertsFrame" src=""></iframe>
+      </div>
+    </div>
+
+    <div class="section-card" onclick="toggleSection('recentIncident', 'IncidentReport.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #42A5F5, #478ED1);">📊</div>
+        <div class="section-info">
+          <div class="section-title">Recent Incident</div>
+          <div class="section-subtitle">Latest incident reports</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        <div class="control-icons">
+          <div class="control-icon">🔄</div>
+          <div class="control-icon">⛶</div>
+        </div>
+      </div>
+      <div class="section-content" id="recentIncidentContent">
+        <iframe class="section-iframe" id="recentIncidentFrame" src=""></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentActiveSection = null;
+
+    function loadPage(page) {
+      document.getElementById("Incidents").src = page;
+      // Close all sections when using top cards
+      closeAllSections();
+    }
+
+    function toggleSection(sectionId, page) {
+      const card = document.querySelector(`[onclick*="${sectionId}"]`);
+      const content = document.getElementById(sectionId + 'Content');
+      const iframe = document.getElementById(sectionId + 'Frame');
+      
+      // If clicking the same section that's already active, close it
+      if (currentActiveSection === sectionId) {
+        content.classList.remove('expanded');
+        card.classList.remove('active');
+        iframe.src = "";
+        currentActiveSection = null;
+        return;
+      }
+      
+      // Close all other sections first
+      closeAllSections();
+      
+      // Open current section
+      card.classList.add('active');
+      content.classList.add('expanded');
+      iframe.src = page;
+      currentActiveSection = sectionId;
+    }
+
+    function closeAllSections() {
+      document.querySelectorAll('.section-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      document.querySelectorAll('.section-content').forEach(content => {
+        content.classList.remove('expanded');
+      });
+      document.querySelectorAll('.section-iframe').forEach(iframe => {
+        iframe.src = "";
+      });
+      currentActiveSection = null;
+    }
+
+    function updateTime() {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      document.getElementById('currentTime').textContent = timeString;
+    }
+
+    // Update time every second
+    updateTime();
+    setInterval(updateTime, 1000);
+
+    // Add some interactive feedback
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('click', function() {
+        this.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+          this.style.transform = '';
+        }, 150);
+      });
+    });
+  </script>
+</body>
+</html>

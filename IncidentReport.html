@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CamShield Admin Dashboard - Custom Marker</title>
+  <style>
+    #map {
+      height: 500px;
+      width: 100%;
+      margin-top: 10px;
+      border: 2px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <h2>Custom Marker Tool</h2>
+  
+  <label for="markerType">Select Marker Type:</label>
+  <select id="markerType">
+    <option value="Guard Post">Guard Post</option>
+    <option value="Camera">Camera</option>
+    <option value="Emergency Equipment">Emergency Equipment</option>
+  </select>
+  
+  <p>Click on the map to place a marker.</p>
+  <div id="map"></div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ✅ Your Firebase config
+   const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app",
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let map;
+
+    // Initialize Google Map
+    window.initMap = async function () {
+      map = new google.maps.Map(document.getElementById("map"), {
+        center: { lat: 3.139, lng: 101.6869 }, // Example: Kuala Lumpur
+        zoom: 15,
+      });
+
+      // Load saved markers from Firestore
+      const querySnapshot = await getDocs(collection(db, "Markers"));
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        new google.maps.Marker({
+          position: { lat: data.lat, lng: data.lng },
+          map,
+          title: data.type,
+        });
+      });
+
+      // On map click, save new marker
+      map.addListener("click", async (e) => {
+        const markerType = document.getElementById("markerType").value;
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+
+        // Save to Firestore
+        await addDoc(collection(db, "Markers"), {
+          type: markerType,
+          lat: lat,
+          lng: lng,
+          timestamp: new Date()
+        });
+
+        // Place marker immediately
+        new google.maps.Marker({
+          position: { lat, lng },
+          map,
+          title: markerType,
+        });
+      });
+    }
+  </script>
+
+  <!-- Google Maps API (replace YOUR_API_KEY) -->
+  <script async
+    src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap">
+  </script>
+</body>
+</html>

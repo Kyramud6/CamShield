@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SOS Dashboard</title>
+  <script type="module">
+    // Import Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app", 
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Fetch SOS Requests
+    async function loadSOS() {
+      const querySnapshot = await getDocs(collection(db, "SOS"));
+      const sosList = document.getElementById("sos-list");
+      sosList.innerHTML = "";
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+
+        // Format location
+        let loc = "N/A";
+        if (data.location && data.location.latitude !== undefined && data.location.longitude !== undefined) {
+          loc = `${data.location.latitude}, ${data.location.longitude}`;
+        }
+
+        // Format timestamp
+        let timeStr = "N/A";
+        if (data.timestamp && data.timestamp.toDate) {
+          timeStr = data.timestamp.toDate().toLocaleString();
+        }
+
+        const sosItem = document.createElement("div");
+        sosItem.classList.add("sos-item");
+
+        sosItem.innerHTML = `
+          <p><strong>Name:</strong> ${data.name || "N/A"}</p>
+          <p><strong>Location:</strong> ${loc}</p>
+          <p><strong>Type:</strong> ${data.type || "N/A"}</p>
+          <p><strong>Status:</strong> ${data.status || "N/A"}</p>
+          <p><strong>Time:</strong> ${timeStr}</p>
+          <button onclick="playAudio('${data.audioUrl || ""}')">🎧 Play Audio</button>
+          <hr>
+        `;
+
+        sosList.appendChild(sosItem);
+      });
+    }
+
+    // Play Audio
+    window.playAudio = function(url) {
+      if (!url) {
+        alert("No audio uploaded yet for this SOS.");
+        return;
+      }
+      const audio = new Audio(url);
+      audio.play();
+    }
+
+    // Load on page start
+    window.onload = loadSOS;
+  </script>
+</head>
+<body>
+  <h2>Active SOS Requests</h2>
+  <div id="sos-list"></div>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CamShield Admin Dashboard - Custom Marker</title>
+  <style>
+    #map {
+      height: 500px;
+      width: 100%;
+      margin-top: 10px;
+      border: 2px solid #ccc;
+    }
+  </style>
+
+  <!-- Mapbox CSS -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+</head>
+<body>
+  <h2>Custom Marker Tool</h2>
+  
+  <label for="markerType">Select Marker Type:</label>
+  <select id="markerType">
+    <option value="Guard Post">Guard Post</option>
+    <option value="Camera">Camera</option>
+    <option value="Emergency Equipment">Emergency Equipment</option>
+  </select>
+  
+  <p>Right click on the map to drop/delete a marker. Left click to select.</p>
+  <div id="map"></div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app",
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ✅ Mapbox Init
+    mapboxgl.accessToken = "pk.eyJ1Ijoia3NsYWkiLCJhIjoiY21mbDVtcHIxMDFzNzJtczhtaG9yNXJ1eCJ9.Fqc91L0H0ZQbz-1VycVEGg";
+
+    const map = new mapboxgl.Map({
+      container: "map",
+      style: "mapbox://styles/kslai/cmfjvs9v1005z01s468fy5ws9", // ✅ your custom style
+      center: [101.6869, 3.139], // [lng, lat] (Kuala Lumpur example)
+      zoom: 15
+    });
+
+    // Track selected marker for delete
+    let selectedMarkerId = null;
+
+    // ✅ Load saved markers from Firestore
+    async function loadMarkers() {
+      const querySnapshot = await getDocs(collection(db, "Markers"));
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const lat = parseFloat(data.lat);
+        const lng = parseFloat(data.lng);
+
+        if (!isNaN(lat) && !isNaN(lng)) {
+          const marker = new mapboxgl.Marker()
+            .setLngLat([lng, lat])
+            .setPopup(new mapboxgl.Popup().setText(data.type || "Unknown"))
+            .addTo(map);
+
+          // Select marker on click
+          marker.getElement().addEventListener("click", () => {
+            selectedMarkerId = docSnap.id;
+            alert(`Selected marker: ${data.type}`);
+          });
+        } else {
+          console.warn("Invalid marker data:", data);
+        }
+      });
+    }
+
+    // ✅ Right click menu for drop/delete
+    map.on("contextmenu", async (e) => {
+      if (selectedMarkerId) {
+        // Delete selected marker
+        await deleteDoc(doc(db, "Markers", selectedMarkerId));
+        alert("Marker deleted!");
+        location.reload(); // refresh map
+      } else {
+        // Drop a new pin
+        const markerType = document.getElementById("markerType").value;
+        const lat = e.lngLat.lat;
+        const lng = e.lngLat.lng;
+
+        const docRef = await addDoc(collection(db, "Markers"), {
+          type: markerType,
+          lat: lat,
+          lng: lng,
+          timestamp: new Date()
+        });
+
+        new mapboxgl.Marker()
+          .setLngLat([lng, lat])
+          .setPopup(new mapboxgl.Popup().setText(markerType))
+          .addTo(map);
+
+        alert("New marker added!");
+      }
+    });
+
+    // Load existing markers on startup
+    loadMarkers();
+  </script>
+
+  <!-- Mapbox JS -->
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+</body>
+</html>
