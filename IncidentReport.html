@@ -1,41 +1,80 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>CamShield Admin Dashboard - Custom Marker</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Reports</title>
   <style>
-    #map {
-      height: 500px;
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    table {
       width: 100%;
-      margin-top: 10px;
-      border: 2px solid #ccc;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    thead {
+      background: #42a5f5;
+      color: white;
+    }
+
+    th, td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    tbody tr:hover {
+      background: #f1f1f1;
+    }
+
+    .no-data {
+      text-align: center;
+      color: #888;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h2>Custom Marker Tool</h2>
-  
-  <label for="markerType">Select Marker Type:</label>
-  <select id="markerType">
-    <option value="Guard Post">Guard Post</option>
-    <option value="Camera">Camera</option>
-    <option value="Emergency Equipment">Emergency Equipment</option>
-  </select>
-  
-  <p>Click on the map to place a marker.</p>
-  <div id="map"></div>
+  <h2>Recent Incident Reports</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Type</th>
+        <th>Description</th>
+        <th>Location</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody id="incidentTableBody">
+      <tr><td colspan="4" class="no-data">Loading...</td></tr>
+    </tbody>
+  </table>
 
-  <!-- Firebase SDK -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    // Import Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getFirestore, collection, getDocs, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-    // ✅ Your Firebase config
-   const firebaseConfig = {
+    const firebaseConfig = {
       apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
       authDomain: "camshield-50aec.firebaseapp.com",
       projectId: "camshield-50aec",
-      storageBucket: "camshield-50aec.firebasestorage.app",
+      storageBucket: "camshield-50aec.firebasestorage.app", 
       messagingSenderId: "655472977777",
       appId: "1:655472977777:web:907fe040370301c08b78d0",
       measurementId: "G-W4N2BLCEL3"
@@ -44,53 +83,40 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let map;
+    async function loadIncidents() {
+      const tbody = document.getElementById("incidentTableBody");
+      tbody.innerHTML = `<tr><td colspan="4" class="no-data">Loading...</td></tr>`;
 
-    // Initialize Google Map
-    window.initMap = async function () {
-      map = new google.maps.Map(document.getElementById("map"), {
-        center: { lat: 3.139, lng: 101.6869 }, // Example: Kuala Lumpur
-        zoom: 15,
-      });
+      try {
+        // Get recent incidents (latest 10)
+        const q = query(collection(db, "incidentReports"), orderBy("timestamp", "desc"), limit(10));
+        const querySnapshot = await getDocs(q);
 
-      // Load saved markers from Firestore
-      const querySnapshot = await getDocs(collection(db, "Markers"));
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        new google.maps.Marker({
-          position: { lat: data.lat, lng: data.lng },
-          map,
-          title: data.type,
-        });
-      });
+        if (querySnapshot.empty) {
+          tbody.innerHTML = `<tr><td colspan="4" class="no-data">No incidents found</td></tr>`;
+          return;
+        }
 
-      // On map click, save new marker
-      map.addListener("click", async (e) => {
-        const markerType = document.getElementById("markerType").value;
-        const lat = e.latLng.lat();
-        const lng = e.latLng.lng();
-
-        // Save to Firestore
-        await addDoc(collection(db, "Markers"), {
-          type: markerType,
-          lat: lat,
-          lng: lng,
-          timestamp: new Date()
+        tbody.innerHTML = "";
+        querySnapshot.forEach(doc => {
+          const data = doc.data();
+          const row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${data.type || "N/A"}</td>
+            <td>${data.description || "N/A"}</td>
+            <td>${data.location || "N/A"}</td>
+            <td>${data.timestamp?.toDate ? data.timestamp.toDate().toLocaleString() : "N/A"}</td>
+          `;
+          tbody.appendChild(row);
         });
 
-        // Place marker immediately
-        new google.maps.Marker({
-          position: { lat, lng },
-          map,
-          title: markerType,
-        });
-      });
+      } catch (error) {
+        console.error("Error loading incidents:", error);
+        tbody.innerHTML = `<tr><td colspan="4" class="no-data">Error loading data</td></tr>`;
+      }
     }
-  </script>
 
-  <!-- Google Maps API (replace YOUR_API_KEY) -->
-  <script async
-    src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap">
+    loadIncidents();
   </script>
 </body>
 </html>
