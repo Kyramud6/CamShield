@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "655472977777",
+    "project_id": "camshield-50aec",
+    "storage_bucket": "camshield-50aec.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:655472977777:android:8e824b35329789a68b78d0",
+        "android_client_info": {
+          "package_name": "com.camshield.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBT1jWNBT5x-a8dOvtP8ambXeDQU-4DO7M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
