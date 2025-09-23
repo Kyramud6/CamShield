@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Custom Marker Management</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+      border: 2px solid #ccc;
+    }
+    .legend {
+      background: white;
+      padding: 10px;
+      margin: 10px;
+      font-size: 14px;
+      font-family: Arial, sans-serif;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    .legend h4 {
+      margin: 0 0 5px 0;
+      font-size: 14px;
+      text-align: center;
+    }
+    .legend div {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+    .legend img {
+      width: 20px;
+      height: 20px;
+      margin-right: 8px;
+    }
+    /* Right-click context menu */
+    .context-menu {
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      padding: 8px;
+      display: none;
+      flex-direction: row;
+      gap: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      z-index: 1000;
+    }
+    .context-menu img {
+      width: 30px;
+      height: 30px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="contextMenu" class="context-menu">
+    <img src="https://img.freepik.com/premium-vector/cctv-logo_535345-1808.jpg" data-type="camera" title="Camera">
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYAfw5BCHFw5XdId10eb0KljXOxdSrbbPcXQ&s" data-type="emergency equipment" title="Emergency Equipment">
+    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgSXyk9gRsvfbk_Xh3XPnxDQfPUlTg_zhBrQ&s" data-type="guard post" title="Guard Post">
+  </div>
+
+  <script type="module">
+    import { Loader } from 'https://unpkg.com/@googlemaps/js-api-loader@1.16.2/dist/index.esm.js';
+
+    // Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, onSnapshot, addDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app",
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let map;
+    let markers = {};
+    let infoWindow;
+    let clickLatLng = null;
+
+    const loader = new Loader({
+      apiKey: "AIzaSyA3_P8EIN0I1IJv0j9cP7WZdhdOZyXHgGQ",
+      version: "weekly",
+    });
+
+    async function initMap() {
+      const { Map } = await loader.importLibrary("maps");
+
+      // INTI Nilai campus default
+      map = new Map(document.getElementById("map"), {
+        center: { lat: 2.813954, lng: 101.757805 },
+        zoom: 18,
+      });
+
+      infoWindow = new google.maps.InfoWindow();
+
+      watchMarkers();
+
+      // Right-click to add marker menu
+      map.addListener("rightclick", (event) => {
+        clickLatLng = event.latLng;
+        showContextMenu(event.pixel);
+      });
+
+      // Hide menu on map click
+      map.addListener("click", () => {
+        document.getElementById("contextMenu").style.display = "none";
+      });
+
+      // Attach actions to context menu icons
+      document.querySelectorAll("#contextMenu img").forEach(img => {
+        img.addEventListener("click", async () => {
+          const type = img.dataset.type;
+          if (clickLatLng) {
+            await addDoc(collection(db, "Markers"), {
+              lat: clickLatLng.lat(),
+              lng: clickLatLng.lng(),
+              type: type
+            });
+          }
+          document.getElementById("contextMenu").style.display = "none";
+        });
+      });
+
+      // Legend
+      const legend = document.createElement("div");
+      legend.classList.add("legend");
+      legend.innerHTML = `
+        <h4>Legend</h4>
+        <div><img src="https://img.freepik.com/premium-vector/cctv-logo_535345-1808.jpg"> Camera</div>
+        <div><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYAfw5BCHFw5XdId10eb0KljXOxdSrbbPcXQ&s"> Emergency Equipment</div>
+        <div><img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgSXyk9gRsvfbk_Xh3XPnxDQfPUlTg_zhBrQ&s"> Guard Post</div>
+      `;
+      map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(legend);
+    }
+
+    function showContextMenu(pixel) {
+      const menu = document.getElementById("contextMenu");
+      menu.style.left = pixel.x + "px";
+      menu.style.top = pixel.y + "px";
+      menu.style.display = "flex";
+    }
+
+    function getMarkerIcon(type) {
+      switch (type?.toLowerCase()) {
+        case "camera":
+          return { url: "https://img.freepik.com/premium-vector/cctv-logo_535345-1808.jpg", scaledSize: new google.maps.Size(25, 25) };
+        case "emergency equipment":
+          return { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYAfw5BCHFw5XdId10eb0KljXOxdSrbbPcXQ&s", scaledSize: new google.maps.Size(25, 25) };
+        case "guard post":
+          return { url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgSXyk9gRsvfbk_Xh3XPnxDQfPUlTg_zhBrQ&s", scaledSize: new google.maps.Size(25, 25) };
+        default:
+          return "http://maps.google.com/mapfiles/ms/icons/red-dot.png";
+      }
+    }
+
+    function watchMarkers() {
+      const ref = collection(db, "Markers");
+      onSnapshot(ref, (snapshot) => {
+        snapshot.docChanges().forEach(change => {
+          const docId = change.doc.id;
+          const data = change.doc.data();
+
+          if (change.type === "added") {
+            const marker = new google.maps.Marker({
+              position: { lat: Number(data.lat), lng: Number(data.lng) },
+              map,
+              title: data.type || "Marker",
+              icon: getMarkerIcon(data.type),
+            });
+
+            // Left click → show info
+            marker.addListener("click", () => {
+              infoWindow.setContent(`<b>Type:</b> ${data.type}<br>Lat: ${data.lat}<br>Lng: ${data.lng}`);
+              infoWindow.open(map, marker);
+            });
+
+            // Right click → delete
+            marker.addListener("rightclick", async () => {
+              if (confirm("Delete this marker?")) {
+                await deleteDoc(doc(db, "Markers", docId));
+              }
+            });
+
+            markers[docId] = marker;
+          }
+
+          if (change.type === "removed") {
+            markers[docId].setMap(null);
+            delete markers[docId];
+          }
+        });
+      });
+    }
+
+    window.addEventListener('load', initMap);
+  </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Campus Map</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+    }
+    #map {
+      height: 400px; /* Fits inside modal */
+      width: 100%;
+      border: 2px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script type="module">
+    import { Loader } from 'https://unpkg.com/@googlemaps/js-api-loader@1.16.2/dist/index.esm.js';
+
+    // Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getFirestore, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app",
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let map;
+    let markers = { markers: [], sos: [] };
+    let infoWindow;
+
+    const loader = new Loader({
+      apiKey: "AIzaSyA3_P8EIN0I1IJv0j9cP7WZdhdOZyXHgGQ",
+      version: "weekly",
+    });
+
+    async function initMap() {
+      try {
+        const { Map } = await loader.importLibrary("maps");
+
+       // INTI Nilai campus default
+      map = new Map(document.getElementById("map"), {
+          center: { lat: 2.813954, lng: 101.757805 },
+          zoom: 18,
+        });
+
+        infoWindow = new google.maps.InfoWindow();
+
+        watchMarkers();
+        watchSOS();
+
+        if (window.parent) {
+          window.parent.postMessage({ type: 'mapLoaded' }, '*');
+        }
+      } catch (error) {
+        console.error("Error loading Google Maps API:", error);
+      }
+    }
+
+    // Choose custom icon for each marker type
+    function getMarkerIcon(type) {
+      switch (type?.toLowerCase()) {
+        case "camera":
+          return {
+            url: "https://img.freepik.com/premium-vector/cctv-logo_535345-1808.jpg", // CCTV camera
+            scaledSize: new google.maps.Size(20, 20),
+          };
+        case "emergency equipment":
+          return {
+            url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTYAfw5BCHFw5XdId10eb0KljXOxdSrbbPcXQ&s", // Defibrillator/AED
+            scaledSize: new google.maps.Size(20, 20),
+          };
+        case "guard post":
+          return {
+            url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRgSXyk9gRsvfbk_Xh3XPnxDQfPUlTg_zhBrQ&s", // Guard/Police post
+            scaledSize: new google.maps.Size(20, 20),
+          };
+        default:
+          return "http://maps.google.com/mapfiles/ms/icons/red-dot.png"; // fallback
+      }
+    }
+
+    // Load "Markers" collection
+    function watchMarkers() {
+      const ref = collection(db, "Markers");
+      onSnapshot(ref, (snapshot) => {
+        markers.markers.forEach(m => m.setMap(null));
+        markers.markers = [];
+
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.lat && data.lng) {
+            const marker = new google.maps.Marker({
+              position: { lat: Number(data.lat), lng: Number(data.lng) },
+              map: map,
+              title: data.type || "Marker",
+              icon: getMarkerIcon(data.type)
+            });
+
+            marker.addListener("click", () => {
+              const content = `
+                <div style="min-width:150px">
+                  <b>Type:</b> ${data.type || "N/A"}<br>
+                  <b>Lat:</b> ${data.lat}<br>
+                  <b>Lng:</b> ${data.lng}
+                </div>
+              `;
+              infoWindow.setContent(content);
+              infoWindow.open(map, marker);
+            });
+
+            markers.markers.push(marker);
+          }
+        });
+      });
+    }
+
+    // Load "SOS" collection
+    function watchSOS() {
+      const ref = collection(db, "SOS");
+      onSnapshot(ref, (snapshot) => {
+        markers.sos.forEach(m => m.setMap(null));
+        markers.sos = [];
+
+        snapshot.forEach(docSnap => {
+          const data = docSnap.data();
+          if (data.lat && data.lng) {
+            const marker = new google.maps.Marker({
+              position: { lat: Number(data.lat), lng: Number(data.lng) },
+              map: map,
+              title: "SOS Alert",
+              icon: {
+                url: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/SOS_icon_red.svg/64px-SOS_icon_red.svg.png", // SOS logo
+                scaledSize: new google.maps.Size(40, 40),
+              }
+            });
+
+            marker.addListener("click", () => {
+              const content = `
+                <div style="min-width:180px">
+                  <b>🚨 SOS Alert 🚨</b><br>
+                  <b>Status:</b> ${data.status || "Unknown"}<br>
+                  <b>Type:</b> ${data.type || "N/A"}<br>
+                  <b>Lat:</b> ${data.lat}<br>
+                  <b>Lng:</b> ${data.lng}
+                </div>
+              `;
+              infoWindow.setContent(content);
+              infoWindow.open(map, marker);
+            });
+
+            markers.sos.push(marker);
+          }
+        });
+      });
+    }
+
+    window.addEventListener('load', initMap);
+  </script>
+</body>
+</html>

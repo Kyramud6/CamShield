@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Reports</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: white;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .incident-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .incident-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 20px 25px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .incident-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    .incident-avatar {
+      width: 60px;
+      height: 60px;
+      background: #4CAF50;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .incident-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .incident-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 2px;
+    }
+
+    .incident-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #34495e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .incident-location {
+      font-size: 14px;
+      color: #7f8c8d;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .incident-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      text-align: center;
+    }
+
+    .incident-time {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #34495e;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .incident-date {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #7f8c8d;
+      font-size: 14px;
+    }
+
+    .details-btn {
+      background: #e8f4fd;
+      color: #2c3e50;
+      border: 2px solid #ddd;
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .details-btn:hover {
+      background: #d1e7dd;
+      border-color: #4CAF50;
+      transform: scale(1.05);
+    }
+
+    .no-data {
+      text-align: center;
+      color: white;
+      margin-top: 50px;
+      font-size: 18px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .loading {
+      text-align: center;
+      color: white;
+      margin-top: 50px;
+      font-size: 18px;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #f0f0f0;
+      border-radius: 25px;
+      padding: 30px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      border: 3px solid #333;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 32px;
+      cursor: pointer;
+      color: #333;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+    }
+
+    .form-group {
+      margin-bottom: 25px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 15px;
+      border: 3px solid #333;
+      border-radius: 25px;
+      font-size: 16px;
+      background: #e0e0e0;
+      color: #333;
+      outline: none;
+    }
+
+    .form-textarea {
+      width: 100%;
+      padding: 15px;
+      border: 3px solid #333;
+      border-radius: 20px;
+      font-size: 16px;
+      background: #e0e0e0;
+      color: #333;
+      outline: none;
+      min-height: 120px;
+      resize: vertical;
+      font-family: inherit;
+    }
+
+    .remove-btn {
+      width: 100%;
+      background: #2196F3;
+      color: white;
+      border: none;
+      padding: 15px;
+      border-radius: 25px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 20px;
+    }
+
+    .remove-btn:hover {
+      background: #1976D2;
+      transform: scale(1.02);
+    }
+
+    .incident-image {
+      width: 100%;
+      max-height: 300px;
+      border-radius: 15px;
+      object-fit: cover;
+      margin-top: 10px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+      border: 2px solid #ddd;
+    }
+
+    .image-placeholder {
+      width: 100%;
+      height: 200px;
+      background: #e0e0e0;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      font-size: 16px;
+      margin-top: 10px;
+      border: 2px dashed #ddd;
+    }
+
+    .image-loading {
+      width: 100%;
+      height: 200px;
+      background: #f5f5f5;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #999;
+      font-size: 14px;
+      margin-top: 10px;
+      border: 2px dashed #ddd;
+    }
+
+    .image-error {
+      width: 100%;
+      height: 200px;
+      background: #ffebee;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #c62828;
+      font-size: 14px;
+      margin-top: 10px;
+      border: 2px dashed #ef5350;
+      flex-direction: column;
+      gap: 8px;
+      text-align: center;
+      padding: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .incident-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+      }
+
+      .incident-meta {
+        flex-direction: row;
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .modal-content {
+        margin: 10px;
+        padding: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Recent Incident Reports</h2>
+    <div class="incident-list" id="incidentList">
+      <div class="loading">Loading incidents...</div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">Detail of Incident</h3>
+        <button class="close-btn" id="closeBtn">×</button>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Incident Title</label>
+        <input type="text" class="form-input" id="modalTitle" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input type="text" class="form-input" id="modalLocation" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Posted By</label>
+        <input type="text" class="form-input" id="modalPostedBy" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <input type="text" class="form-input" id="modalStatus" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Description</label>
+        <textarea class="form-textarea" id="modalDescription" readonly>Description</textarea>
+      </div>
+
+      <div class="form-group" id="imageGroup" style="display: none;">
+        <label class="form-label">Incident Image</label>
+        <div id="modalImageContainer">
+          <div class="image-placeholder">No image available</div>
+        </div>
+      </div>
+
+      <button class="remove-btn" id="removeIncidentBtn">Remove Incident</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { 
+      getFirestore, collection, getDocs, query, orderBy, limit, 
+      doc, deleteDoc, getDoc 
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app", 
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    let currentIncidentId = null;
+    let incidentsData = {};
+    let userCache = {}; // Cache resolved user data
+
+    // Modal elements
+    const modalOverlay = document.getElementById('modalOverlay');
+    const closeBtn = document.getElementById('closeBtn');
+    const removeBtn = document.getElementById('removeIncidentBtn');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalLocation = document.getElementById('modalLocation');
+    const modalPostedBy = document.getElementById('modalPostedBy');
+    const modalStatus = document.getElementById('modalStatus');
+    const modalDescription = document.getElementById('modalDescription');
+    const imageGroup = document.getElementById('imageGroup');
+    const modalImageContainer = document.getElementById('modalImageContainer');
+
+    // Resolve display name consistently
+function getDisplayName(data) {
+  // Admin-created post
+  if (data.postedby && data.postedby.toLowerCase() === "admin") {
+    return "Admin";
+  }
+
+  // Check for user fields
+  if (data.name && data.name.trim()) return data.name.trim();
+  if (data.studentid || data.studentId) return `Student ${data.studentid || data.studentId}`;
+  if (data.email) return data.email.split("@")[0];
+
+  return "Anonymous User";
+}
+    // Clean URL handling
+    function getImageUrl(imagePath) {
+      if (!imagePath) return null;
+      
+      // If it's already a complete Supabase URL, use it directly
+      if (imagePath.startsWith('https://') && imagePath.includes('supabase.co/storage')) {
+        return imagePath;
+      }
+      
+      // Fallback construction
+      const SUPABASE_URL = 'https://vjiegugevvdxnyjltqbr.supabase.co';
+      const BUCKET_NAME = 'Picture Incident Storage';
+      return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/incidents/${encodeURIComponent(imagePath)}`;
+
+      let cleanPath = imagePath.toString().trim().replace(/^\/+|\/+$/g, '');
+      if (!cleanPath.includes('incidents/')) {
+        cleanPath = `incidents/${cleanPath}`;
+      }
+      
+      const encodedBucket = encodeURIComponent(BUCKET_NAME);
+      const encodedPath = encodeURIComponent(cleanPath);
+      return `${SUPABASE_URL}/storage/v1/object/public/${encodedBucket}/${encodedPath}`;
+    }
+
+    // Clean image loading
+    function displayImage(imageUrl, container) {
+      if (!imageUrl) {
+        container.innerHTML = `<div class="image-placeholder">No image available</div>`;
+        return;
+      }
+
+      container.innerHTML = `<div class="image-loading">Loading image...</div>`;
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.referrerPolicy = 'no-referrer';
+      
+      img.onload = () => {
+        container.innerHTML = `
+          <img class="incident-image" 
+               src="${imageUrl}" 
+               alt="Incident Image"
+               loading="lazy">
+        `;
+      };
+      
+      img.onerror = () => {
+        container.innerHTML = `
+          <div class="image-error">
+            <div>❌ Image unavailable</div>
+            <div style="font-size: 12px; opacity: 0.7;">The image could not be loaded</div>
+          </div>
+        `;
+      };
+
+      const timeout = setTimeout(() => {
+        img.onerror();
+      }, 10000);
+
+      img.src = imageUrl;
+      clearTimeout(timeout);
+    }
+
+    function openModal(incidentData, incidentId) {
+      currentIncidentId = incidentId;
+
+      modalTitle.value = incidentData.title || "N/A";
+      modalLocation.value = incidentData.location || "N/A";
+      modalStatus.value = incidentData.status || "N/A";
+      modalDescription.value = incidentData.description || "N/A";
+
+     modalPostedBy.value = getDisplayName(incidentData);
+
+      const rawImageUrl = incidentData.picture || incidentData.imageUrl || incidentData.image;
+      const processedImageUrl = getImageUrl(rawImageUrl);
+      
+      if (processedImageUrl) {
+        imageGroup.style.display = 'block';
+        displayImage(processedImageUrl, modalImageContainer);
+      } else {
+        imageGroup.style.display = 'none';
+        modalImageContainer.innerHTML = `<div class="image-placeholder">No image available</div>`;
+      }
+
+      modalOverlay.classList.add("active");
+    }
+
+    function closeModal() {
+      modalOverlay.classList.remove("active");
+      currentIncidentId = null;
+    }
+
+    closeBtn.addEventListener("click", closeModal);
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+
+    removeBtn.addEventListener("click", async () => {
+      if (currentIncidentId && confirm("Are you sure you want to remove this incident?")) {
+        try {
+          await deleteDoc(doc(db, "Incident", currentIncidentId));
+          closeModal();
+          loadIncidents();
+          alert("Incident removed successfully!");
+        } catch (error) {
+          alert("Error removing incident. Please try again.");
+        }
+      }
+    });
+
+    // Load incidents with reference resolution
+    async function loadIncidents() {
+      const incidentList = document.getElementById("incidentList");
+      incidentList.innerHTML = `<div class="loading">Loading incidents...</div>`;
+
+      try {
+        const q = query(collection(db, "Incident"), orderBy("timestamp", "desc"), limit(20));
+        const querySnapshot = await getDocs(q);
+
+        if (querySnapshot.empty) {
+          incidentList.innerHTML = `<div class="no-data">No incidents found</div>`;
+          return;
+        }
+
+        incidentList.innerHTML = "";
+        incidentsData = {};
+
+        // Process all incidents and resolve names concurrently
+        const incidentsWithNames = await Promise.all(
+          querySnapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data();
+            const incidentId = docSnap.id;
+            
+            // Resolve display name
+            const displayName = await getDisplayName(data);
+            
+            incidentsData[incidentId] = data;
+            
+            return { data, incidentId, displayName };
+          })
+        );
+
+        // Sort by timestamp (in case async operations reordered them)
+        incidentsWithNames.sort((a, b) => {
+          const timeA = a.data.timestamp?.toMillis() || 0;
+          const timeB = b.data.timestamp?.toMillis() || 0;
+          return timeB - timeA;
+        });
+
+        // Render cards
+        incidentsWithNames.forEach(({ data, incidentId, displayName }) => {
+          const timestamp = data.timestamp?.toDate ? data.timestamp.toDate() : new Date();
+          const timeString = timestamp.toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit" });
+          const dateString = timestamp.toLocaleDateString("en-GB");
+
+          const getAvatarColor = (name) => {
+            const colors = ["#4CAF50", "#2196F3", "#FF9800", "#9C27B0", "#F44336", "#3F51B5"];
+            const firstLetter = name.charAt(0).toUpperCase();
+            const index = Math.abs(firstLetter.charCodeAt(0) - 65) % colors.length;
+            return colors[index];
+          };
+          const avatarColor = getAvatarColor(displayName);
+          const avatarInitial = displayName.charAt(0).toUpperCase();
+
+          const hasImage = data.picture || data.imageUrl || data.image;
+
+          const incidentCard = document.createElement("div");
+          incidentCard.className = "incident-card";
+          incidentCard.innerHTML = `
+            <div class="incident-avatar" style="background: ${avatarColor}">${avatarInitial}</div>
+            <div class="incident-info">
+              <div class="incident-name">${displayName}</div>
+              <div class="incident-title">${data.title || "No Title"} ${hasImage ? '📷' : ''}</div>
+              <div class="incident-location">📍 ${data.location || "Unknown Location"}</div>
+            </div>
+            <div class="incident-meta">
+              <div class="incident-time">🕐 ${timeString}</div>
+              <div class="incident-date">📅 ${dateString}</div>
+              <button class="details-btn" onclick="showIncidentDetails('${incidentId}')">Details</button>
+            </div>
+          `;
+
+          incidentList.appendChild(incidentCard);
+        });
+
+      } catch (error) {
+        console.error("Error loading incidents:", error);
+        incidentList.innerHTML = `<div class="no-data">Error loading incidents. Please try again.</div>`;
+      }
+    }
+
+    window.showIncidentDetails = function(incidentId) {
+      const incidentData = incidentsData[incidentId];
+      if (incidentData) {
+        openModal(incidentData, incidentId);
+      } else {
+        alert("Incident data not found. Please refresh the page.");
+      }
+    };
+
+    // Load immediately
+    loadIncidents();
+    setInterval(loadIncidents, 30000);
+  </script>
+</body>
+</html>
