@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>CamSHIELD Dashboard</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* Modal Styles - Fixed and Complete */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 10000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(10px);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal-content {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(20px);
+      margin: 2% auto;
+      padding: 0;
+      border-radius: 20px;
+      width: 90%;
+      max-width: 1100px;
+      height: 85vh;
+      max-height: 900px;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      flex-direction: column;
+      animation: modalSlideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      overflow: hidden;
+    }
+
+    @keyframes modalSlideUp {
+      from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* Modal Header */
+    .modal-header {
+      background: linear-gradient(135deg, #4CAF50, #2196F3);
+      color: white;
+      padding: 20px 30px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .modal-header h2 {
+      font-size: 24px;
+      font-weight: 600;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-icon {
+      font-size: 26px;
+    }
+
+    /* Close Button */
+    .close {
+      color: white;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      border: none;
+    }
+
+    .close:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: scale(1.1);
+    }
+
+    /* Iframe Container */
+    .iframe-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: rgba(248, 255, 252, 0.8);
+    }
+
+    #incidentFrame {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    /* Loading Overlay */
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(229, 255, 248, 0.95);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 5;
+    }
+
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(76, 175, 80, 0.3);
+      border-top: 3px solid #4CAF50;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+      color: #2c3e50;
+      font-size: 16px;
+      font-weight: 500;
+    }
+
+    /* Body Scroll Lock */
+    body.modal-open {
+      overflow: hidden;
+    }
+
+    .header {
+      background: rgba(229, 255, 248, 0.95);
+      backdrop-filter: blur(10px);
+      border-radius: 25px;
+      padding: 15px 30px;
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+
+    .logo-icon {
+      width: 50px;
+      height: 50px;
+      background: linear-gradient(45deg, #4CAF50, #2196F3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    .logo-text {
+      font-size: 28px;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+
+    .logo-text .shield {
+      color: #4CAF50;
+    }
+
+    .status {
+      display: flex;
+      margin-right: -900px;
+      gap: 10px;
+      background: rgba(76, 175, 80, 0.1);
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: 2px solid #4CAF50;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      background: #4CAF50;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+    }
+
+    .status-text {
+      color: #2c3e50;
+      font-weight: 600;
+    }
+
+    .time {
+      color: #34495e;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 25px;
+      margin-bottom: 30px;
+    }
+
+    .card {
+      background: rgba(242, 255, 252, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 30px;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: var(--accent-color);
+      transform: scaleX(0);
+      transition: transform 0.3s ease;
+    }
+
+    .card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .card:hover {
+      transform: translateY(-8px);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+    }
+
+    .card.custom-marker {
+      --accent-color: #4CAF50;
+    }
+
+    .card.fire-emergency {
+      --accent-color: #f44336;
+    }
+
+    .card.post-incident {
+      --accent-color: #2196F3;
+    }
+
+    .card.companion-request {
+      --accent-color: #00BCD4;
+    }
+
+    .card.fire-alerts {
+      --accent-color: #FF5722;
+    }
+
+    .card.sos-alerts {
+      --accent-color: #FF9800;
+    }
+
+    .card-icon {
+      width: 60px;
+      height: 60px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+      color: white;
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #2c3e50;
+      margin-bottom: 10px;
+    }
+
+    .card-subtitle {
+      color: #7f8c8d;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+
+    .notification-badge {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: var(--accent-color);
+      color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .bottom-section {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      margin-bottom: 20px;
+      margin-left: -20px;
+      margin-right: -20px;
+      padding: 0 20px;
+    }
+
+    .section-card {
+      background: rgba(229, 255, 248, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 25px;
+      padding: 25px 30px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+      width: 100%;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .section-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    .section-card.active {
+      background: rgba(255, 255, 255, 0.08);
+      border: 2px solid #4CAF50;
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(76, 175, 80, 0.3);
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      width: 100%;
+      min-height: 60px;
+    }
+
+    .section-icon {
+      width: 55px;
+      height: 55px;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .section-info {
+      flex: 1;
+    }
+
+    .section-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+
+    .section-subtitle {
+      color: #7f8c8d;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .expand-indicator {
+      font-size: 18px;
+      color: #7f8c8d;
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+      margin-right: 20px;
+      font-weight: bold;
+    }
+
+    .section-card.active .expand-indicator {
+      transform: rotate(180deg);
+      color: #4CAF50;
+    }
+
+    .control-icons {
+      display: flex;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .control-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 16px;
+    }
+
+    .control-icon:hover {
+      background: rgba(0, 0, 0, 0.15);
+      transform: scale(1.05);
+    }
+
+    .section-content {
+      height: 0;
+      overflow: hidden;
+      transition: all 0.4s ease;
+      margin-top: 0;
+      opacity: 0;
+    }
+
+    .section-content.expanded {
+      height: 450px;
+      margin-top: 25px;
+      opacity: 1;
+    }
+
+    .section-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 15px;
+      background: rgba(255, 255, 255, 0.5);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .iframe-container {
+      background: rgba(255, 255, 255, 0.5);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 20px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      height: 600px;
+      margin-top: 20px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      border-radius: 15px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1024px) {
+      .dashboard-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      
+      .section-header {
+        gap: 15px;
+      }
+      
+      .section-content.expanded {
+        height: 350px;
+      }
+      
+      .modal-content {
+        width: 95%;
+        height: 90vh;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+      }
+      
+      body {
+        padding: 10px;
+      }
+      
+      .header {
+        flex-direction: column;
+        gap: 15px;
+        padding: 15px 20px;
+      }
+      
+      .status {
+        margin-right: 0;
+      }
+      
+      .section-header {
+        gap: 10px;
+      }
+      
+      .section-content.expanded {
+        height: 300px;
+      }
+      
+      .modal-content {
+        width: 98%;
+        height: 95vh;
+        margin: 1% auto;
+        border-radius: 15px;
+      }
+      
+      .modal-header {
+        padding: 15px 20px;
+      }
+      
+      .modal-header h2 {
+        font-size: 20px;
+      }
+      
+      .logo-text {
+        font-size: 24px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        padding: 20px;
+      }
+      
+      .card-icon {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+        margin-bottom: 15px;
+      }
+      
+      .card-title {
+        font-size: 18px;
+      }
+      
+      .card-subtitle {
+        font-size: 13px;
+      }
+      
+      .modal-header {
+        padding: 12px 15px;
+      }
+      
+      .close {
+        width: 35px;
+        height: 35px;
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+
+
+<script>
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+  authDomain: "camshield-50aec.firebaseapp.com",
+  projectId: "camshield-50aec",
+  storageBucket: "camshield-50aec.firebasestorage.app",
+  messagingSenderId: "655472977777",
+  appId: "1:655472977777:web:907fe040370301c08b78d0",
+  measurementId: "G-W4N2BLCEL3"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+function triggerFireEmergency() {
+  console.log('🔥 Fire Emergency clicked!');
+  
+  db.collection('SOS').add({
+    type: 'fire_emergency',   // your type
+    status: 'open',           // default
+    time: new Date().toISOString(),
+    audioUrl: '',
+    location: [0, 0],
+    name: 'Admin Fire Alert',
+    userid: 'admin_system',
+    postedBy: 'admin_dashboard'
+  })
+  .then((docRef) => {
+    console.log('✅ Fire alert added! ID:', docRef.id);
+    alert('🚨 FIRE EMERGENCY ADDED!\n\nDocument ID: ' + docRef.id);
+
+    // Visual feedback on the button
+    const button = document.querySelector('.fire-emergency');
+    if (button) {
+      button.style.background = '#4CAF50';
+      setTimeout(() => { button.style.background = ''; }, 1000);
+    }
+  })
+  .catch(error => {
+    console.error('❌ Error:', error);
+    alert('❌ Failed: ' + error.message);
+  });
+}
+
+  // ✅ Attach a listener for each alert type
+  function attachBadgeListener(type, badgeId) {
+    db.collection("SOS")
+      .where("type", "==", type)
+      .onSnapshot((snapshot) => {
+        const count = snapshot.size;
+        document.getElementById(badgeId).innerText = count;
+
+        // Debug log
+        console.log(`🔎 Listening for type "${type}"`);
+        snapshot.forEach((doc) => {
+          console.log(`Doc ID: ${doc.id}, data:`, doc.data());
+        });
+        console.log(`✅ Count for ${type}: ${count}`);
+      });
+  }
+
+  // ✅ Attach to all 3 alert types
+  attachBadgeListener("SOS", "badge-sos");
+  attachBadgeListener("fire_emergency", "badge-fire");
+  attachBadgeListener("walk_with_me", "badge-walk");
+
+  // ✅ Extra: log everything in SOS collection for debugging
+  db.collection("SOS").onSnapshot((snapshot) => {
+    console.log("📂 All docs in SOS collection:");
+    snapshot.forEach((doc) => {
+      console.log(doc.id, doc.data());
+    });
+  });
+</script>
+
+
+</script>
+<body>
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">CS</div>
+      <div class="logo-text">Cam<span class="shield">SHIELD</span></div>
+    </div>
+    <div class="status">
+      <span class="status-text">Status: Online</span>
+      <div class="status-dot"></div>
+    </div>
+    <div class="time" id="currentTime">18:30</div>
+  </div>
+
+
+
+<div class="dashboard-grid">
+  <!-- Custom Marker -->
+  <div class="card custom-marker" onclick="openModal('CustomMarker.html', 'Custom Marker', '📍')">
+    <div class="card-icon" style="background: #4CAF50;">📍</div>
+    <div class="card-title">Custom Marker</div>
+    <div class="card-subtitle">Add or remove map markers</div>
+  </div>
+
+  <!-- Fire Emergency Card -->
+  <div class="card fire-emergency" onclick="triggerFireEmergency()">
+    <div class="card-icon" style="background: #f44336;">🚨</div>
+    <div class="card-title">Fire Emergency</div>
+    <div class="card-subtitle">Add fire alert to SOS</div>
+  </div>
+
+  <!-- Post Incident -->
+  <div class="card post-incident" onclick="openModal('AddIncident.html', 'Incident Reporting', '📋')">
+    <div class="card-icon" style="background: #2196F3;">📋</div>
+    <div class="card-title">Post Incident</div>
+    <div class="card-subtitle">Report and manage incidents</div>
+  </div>
+
+<!-- Walk With Me -->
+<div class="card companion-request">
+  <div class="card-icon" style="background: #00BCD4;">👥</div>
+  <div class="card-title">Companion Request</div>
+  <div class="card-subtitle">Request assistance</div>
+  <div class="notification-badge" id="badge-walk">0</div>
+</div>
+
+<!-- Fire Alerts -->
+<div class="card fire-alerts">
+  <div class="card-icon" style="background: #FF5722;">🔥</div>
+  <div class="card-title">Fire Alerts</div>
+  <div class="card-subtitle">Active fire notifications</div>
+  <div class="notification-badge" id="badge-fire">0</div>
+</div>
+
+<!-- SOS Alerts -->
+<div class="card sos-alerts">
+  <div class="card-icon" style="background: #FF9800;">🆘</div>
+  <div class="card-title">SOS Alerts</div>
+  <div class="card-subtitle">Emergency SOS signals</div>
+  <div class="notification-badge" id="badge-sos">0</div>
+</div>
+
+</div>
+
+<!-- Reusable Modal (place OUTSIDE the grid) -->
+<div id="universalModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2 id="modalTitle">
+        <span class="header-icon">📋</span>
+        Modal
+      </h2>
+      <button class="close" onclick="closeModal()" aria-label="Close modal">&times;</button>
+    </div>
+    <div class="iframe-container">
+      <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading...</div>
+      </div>
+      <iframe id="modalFrame" src="" onload="hideLoading()"></iframe>
+    </div>
+  </div>
+</div>
+
+
+  <div class="bottom-section">
+    <div class="section-card" onclick="toggleSection('liveCampusMap', 'liveCampusMap.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #FF6B6B, #4ECDC4);">🗺️</div>
+        <div class="section-info">
+          <div class="section-title">Live Campus Map</div>
+          <div class="section-subtitle">Real-time campus monitoring</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        </div>
+    </div>
+      </div>
+      <div class="section-content" id="liveCampusMapContent">
+        <iframe class="section-iframe" id="liveCampusMapFrame" src=""></iframe>
+      </div>
+    </div>
+    
+    <div class="section-card" onclick="toggleSection('activeAlerts', 'ActiveAlerts.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #FFA726, #FF7043);">⚠️</div>
+        <div class="section-info">
+          <div class="section-title">Active Alerts</div>
+          <div class="section-subtitle">Current system alerts</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        </div>
+      </div>
+      <div class="section-content" id="activeAlertsContent">
+        <iframe class="section-iframe" id="activeAlertsFrame" src=""></iframe>
+      </div>
+    </div>
+
+    <div class="section-card" onclick="toggleSection('recentIncident', 'IncidentReport.html')">
+      <div class="section-header">
+        <div class="section-icon" style="background: linear-gradient(45deg, #42A5F5, #478ED1);">📊</div>
+        <div class="section-info">
+          <div class="section-title">Recent Incident</div>
+          <div class="section-subtitle">Latest incident reports</div>
+        </div>
+        <div class="expand-indicator">▼</div>
+        </div>
+      </div>
+      <div class="section-content" id="recentIncidentContent">
+        <iframe class="section-iframe" id="recentIncidentFrame" src=""></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentActiveSection = null;
+
+    function loadPage(page) {
+      document.getElementById("mainframe").src = page;
+      closeAllSections();
+    }
+
+    function toggleSection(sectionId, page) {
+      const card = document.querySelector(`[onclick*="${sectionId}"]`);
+      const content = document.getElementById(sectionId + 'Content');
+      const iframe = document.getElementById(sectionId + 'Frame');
+      
+      if (currentActiveSection === sectionId) {
+        content.classList.remove('expanded');
+        card.classList.remove('active');
+        iframe.src = "";
+        currentActiveSection = null;
+        return;
+      }
+      
+      closeAllSections();
+      
+      card.classList.add('active');
+      content.classList.add('expanded');
+      iframe.src = page;
+      currentActiveSection = sectionId;
+    }
+
+    function closeAllSections() {
+      document.querySelectorAll('.section-card').forEach(card => {
+        card.classList.remove('active');
+      });
+      document.querySelectorAll('.section-content').forEach(content => {
+        content.classList.remove('expanded');
+      });
+      document.querySelectorAll('.section-iframe').forEach(iframe => {
+        iframe.src = "";
+      });
+      currentActiveSection = null;
+    }
+
+    function updateTime() {
+      const now = new Date();
+      const timeString = now.toLocaleTimeString('en-US', { 
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      document.getElementById('currentTime').textContent = timeString;
+    }
+
+
+
+function openModal(file, title, icon) {
+  document.getElementById("modalFrame").src = file;
+  document.getElementById("modalTitle").innerHTML = `<span class="header-icon">${icon}</span> ${title}`;
+  document.getElementById("universalModal").style.display = "flex";
+
+  // Show loading overlay until iframe loads
+  document.getElementById("loadingOverlay").style.display = "flex";
+}
+
+function closeModal() {
+  document.getElementById("universalModal").style.display = "none";
+  document.getElementById("modalFrame").src = ""; // clear iframe
+}
+
+function hideLoading() {
+  document.getElementById("loadingOverlay").style.display = "none";
+}
+
+
+    // Handle iframe communication
+window.addEventListener('message', function(event) {
+  if (event.origin !== window.location.origin) return;
+  
+  const data = event.data;
+  if (data.type === 'closeModal') {
+    closeModal();
+  }
+  if (data.type === 'incidentSubmitted') {
+    alert('Incident reported successfully! Thank you for your report.');
+    closeModal();
+  }
+  if (data.type === 'mapLoaded') {
+    hideLoading(); // Hide loading overlay when map is ready
+  }
+});
+
+    // Initialize
+    updateTime();
+    setInterval(updateTime, 1000);
+
+    // Card click feedback
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('click', function() {
+        this.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+          this.style.transform = '';
+        }, 150);
+      });
+    });
+  </script>
+</body>
+</html>
