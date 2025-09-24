@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Add Incident</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f7fa;
+    }
+    h2 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    form {
+      max-width: 600px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+    label {
+      display: block;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px;
+      background: #42a5f5;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #1e88e5;
+    }
+    .success, .error {
+      margin-top: 15px;
+      font-weight: bold;
+      text-align: center;
+    }
+    .success { color: green; }
+    .error { color: red; }
+
+    #preview-container {
+      margin-top: 10px;
+      text-align: center;
+    }
+    #preview {
+      max-width: 200px;
+      display: none;
+      border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <h2>Post New Incident</h2>
+  <form id="incidentForm">
+    <label for="title">Title</label>
+    <input type="text" id="title" required />
+
+    <label for="description">Description</label>
+    <textarea id="description" rows="4" required></textarea>
+
+ <label for="picture">Picture</label>
+    <input type="file" id="picture" accept="image/*" />
+    <div id="preview-container">
+      <img id="preview" src="" alt="Image preview" />
+    </div>  
+
+    <label for="postedby">Posted By</label>
+    <input type="text" id="postedby" required />
+
+    <label for="location">Location</label>
+    <select id="location" required>
+      <option value="">-- Select a Location --</option>
+      <option value="Library">Library</option>
+      <option value="Cafeteria">Cafeteria</option>
+      <option value="Dormitory">Dormitory</option>
+      <option value="Sports Hall">Sports Hall</option>
+      <option value="Parking Lot">Parking Lot</option>
+    </select>
+
+    <label for="status">Status</label>
+    <select id="status" required>
+      <option value="Open">Open</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Resolved">Resolved</option>
+    </select>
+
+    <button type="submit">Submit Incident</button>
+    <div id="message"></div>
+  </form>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app", 
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Supabase Config
+    const supabaseUrl = "https://vjiegugevvdxnyjltqbr.supabase.co";  
+    const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqaWVndWdldnZkeG55amx0cWJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwMDcyNzMsImV4cCI6MjA3MzU4MzI3M30.CeS3Gfh_RQPGq_cIft_4JOTnBo3efugz0PI9ZIB9bPg";                    // <-- replace
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Form elements
+    const form = document.getElementById("incidentForm");
+    const messageDiv = document.getElementById("message");
+    const fileInput = document.getElementById("picture");
+    const previewImg = document.getElementById("preview");
+
+    // Local preview before upload
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          previewImg.src = e.target.result;
+          previewImg.style.display = "block";
+        };
+        reader.readAsDataURL(fileInput.files[0]);
+      } else {
+        previewImg.style.display = "none";
+        previewImg.src = "";
+      }
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      messageDiv.textContent = "Uploading...";
+      messageDiv.className = "";
+
+      try {
+        let pictureUrl = null;
+
+        if (fileInput.files.length > 0) {
+          const file = fileInput.files[0];
+          const filePath = `incidents/${Date.now()}_${file.name}`;
+
+          const { error } = await supabase.storage
+            .from("Picture Incident Storage") // your bucket name
+            .upload(filePath, file);
+
+          if (error) throw error;
+
+          const { data: publicData } = supabase.storage
+            .from("Picture Incident Storage")
+            .getPublicUrl(filePath);
+
+          pictureUrl = publicData.publicUrl;
+
+          // After upload, show Supabase image preview
+          previewImg.src = pictureUrl;
+          previewImg.style.display = "block";
+        }
+
+        await addDoc(collection(db, "Incident"), {
+          title: document.getElementById("title").value,
+          description: document.getElementById("description").value,
+          picture: pictureUrl,
+          postedby: document.getElementById("postedby").value,
+          location: document.getElementById("location").value,
+          status: document.getElementById("status").value,
+          timestamp: serverTimestamp()
+        });
+
+        messageDiv.textContent = "✅ Incident posted successfully!";
+        messageDiv.className = "success";
+        form.reset();
+
+      } catch (error) {
+        console.error("Error adding incident:", error);
+        messageDiv.textContent = "❌ Failed to post incident.";
+        messageDiv.className = "error";
+      }
+    });
+  </script>
+</body>
+</html>
