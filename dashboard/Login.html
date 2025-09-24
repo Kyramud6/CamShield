@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login - CamShield</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Prevent favicon error -->
+  <link rel="icon" href="data:,">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .login-container {
+      background: #fff;
+      padding: 25px;
+      border-radius: 10px;
+      box-shadow: 0px 4px 15px rgba(0,0,0,0.1);
+      width: 300px;
+      text-align: center;
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 15px;
+      border: none;
+      background: #007bff;
+      color: white;
+      font-size: 16px;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .error {
+      color: red;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <h2>Admin Login</h2>
+    <input type="email" id="email" placeholder="Email" required>
+    <input type="password" id="password" placeholder="Password" required>
+    <button id="loginBtn">Login</button>
+    <p class="error" id="errorMessage"></p>
+  </div>
+
+  <script type="module">
+    // Firebase imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    // Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+      authDomain: "camshield-50aec.firebaseapp.com",
+      projectId: "camshield-50aec",
+      storageBucket: "camshield-50aec.firebasestorage.app",
+      messagingSenderId: "655472977777",
+      appId: "1:655472977777:web:907fe040370301c08b78d0",
+      measurementId: "G-W4N2BLCEL3"
+    };
+
+    // Init Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const loginBtn = document.getElementById("loginBtn");
+    const errorMessage = document.getElementById("errorMessage");
+
+    // Handle login button
+    loginBtn.addEventListener("click", async () => {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        // Restrict to admin only
+        if (user.email === "admin@admin.newinti.edu.my") {
+          window.location.href = "Dashboard.html";
+        } else {
+          await signOut(auth); // Sign out if not admin
+          errorMessage.textContent = "Access denied: Not an admin account.";
+        }
+      } catch (error) {
+        errorMessage.textContent = error.message;
+      }
+    });
+
+    // Check auth state and handle redirect
+    onAuthStateChanged(auth, (user) => {
+      if (user && user.email === "admin@admin.newinti.edu.my") {
+        window.location.href = "Dashboard.html";
+      } else if (user) {
+        signOut(auth).then(() => {
+          // Ensure non-admin users are signed out silently
+        }).catch((error) => {
+          console.error("Error signing out:", error);
+        });
+      }
+    });
+  </script>
+</body>
+</html>
