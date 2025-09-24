@@ -76,14 +76,11 @@
     <label for="description">Description</label>
     <textarea id="description" rows="4" required></textarea>
 
- <label for="picture">Picture</label>
+    <label for="picture">Picture</label>
     <input type="file" id="picture" accept="image/*" />
     <div id="preview-container">
       <img id="preview" src="" alt="Image preview" />
     </div>  
-
-    <label for="postedby">Posted By</label>
-    <input type="text" id="postedby" required />
 
     <label for="location">Location</label>
     <select id="location" required>
@@ -102,13 +99,14 @@
       <option value="Resolved">Resolved</option>
     </select>
 
-    <button type="submit">Submit Incident</button>
+    <button type="submit" id="submitBtn">Submit Incident</button>
     <div id="message"></div>
   </form>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
     import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
 
     // Firebase Config
@@ -116,25 +114,42 @@
       apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
       authDomain: "camshield-50aec.firebaseapp.com",
       projectId: "camshield-50aec",
-      storageBucket: "camshield-50aec.firebasestorage.app", 
+      storageBucket: "camshield-50aec.firebasestorage.app",
       messagingSenderId: "655472977777",
       appId: "1:655472977777:web:907fe040370301c08b78d0",
       measurementId: "G-W4N2BLCEL3"
     };
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
+  
     // Supabase Config
     const supabaseUrl = "https://vjiegugevvdxnyjltqbr.supabase.co";  
     const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZqaWVndWdldnZkeG55amx0cWJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgwMDcyNzMsImV4cCI6MjA3MzU4MzI3M30.CeS3Gfh_RQPGq_cIft_4JOTnBo3efugz0PI9ZIB9bPg";                    // <-- replace
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Form elements
     const form = document.getElementById("incidentForm");
     const messageDiv = document.getElementById("message");
     const fileInput = document.getElementById("picture");
     const previewImg = document.getElementById("preview");
+    const submitBtn = document.getElementById("submitBtn");
+
+    let currentAdmin = null;
+    submitBtn.disabled = true;
+
+    // Ensure we get the logged-in admin
+    onAuthStateChanged(auth, (user) => {
+  if (user && user.email === "admin@admin.newinti.edu.my") {
+    currentAdmin = "Admin"; 
+    submitBtn.disabled = false;
+    console.log("Admin logged in:", currentAdmin);
+  } else {
+    currentAdmin = null;
+    submitBtn.disabled = true;
+    console.log("No admin logged in");
+  }
+});
 
     // Local preview before upload
     fileInput.addEventListener("change", () => {
@@ -153,6 +168,12 @@
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+
+      if (!currentAdmin) {
+        alert("Admin not logged in yet. Try again.");
+        return;
+      }
+
       messageDiv.textContent = "Uploading...";
       messageDiv.className = "";
 
@@ -164,7 +185,7 @@
           const filePath = `incidents/${Date.now()}_${file.name}`;
 
           const { error } = await supabase.storage
-            .from("Picture Incident Storage") // your bucket name
+            .from("Picture Incident Storage")
             .upload(filePath, file);
 
           if (error) throw error;
@@ -174,8 +195,6 @@
             .getPublicUrl(filePath);
 
           pictureUrl = publicData.publicUrl;
-
-          // After upload, show Supabase image preview
           previewImg.src = pictureUrl;
           previewImg.style.display = "block";
         }
@@ -184,7 +203,7 @@
           title: document.getElementById("title").value,
           description: document.getElementById("description").value,
           picture: pictureUrl,
-          postedby: document.getElementById("postedby").value,
+            postedBy: currentAdmin,
           location: document.getElementById("location").value,
           status: document.getElementById("status").value,
           timestamp: serverTimestamp()
@@ -193,6 +212,7 @@
         messageDiv.textContent = "✅ Incident posted successfully!";
         messageDiv.className = "success";
         form.reset();
+        previewImg.style.display = "none";
 
       } catch (error) {
         console.error("Error adding incident:", error);

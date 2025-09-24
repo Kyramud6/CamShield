@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOS Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 30px;
+      color: white;
+      font-size: 28px;
+      font-weight: 700;
+    }
+
+    .sos-list {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .sos-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(15px);
+      border-radius: 20px;
+      padding: 20px 25px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    .sos-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+    }
+
+    .sos-card.urgent {
+      border-left: 6px solid #e74c3c;
+      background: rgba(255, 235, 235, 0.95);
+    }
+
+    .sos-card.resolved {
+      border-left: 6px solid #27ae60;
+      background: rgba(235, 255, 235, 0.95);
+    }
+
+    .sos-card.pending {
+      border-left: 6px solid #f39c12;
+      background: rgba(255, 245, 235, 0.95);
+    }
+
+    .sos-avatar {
+      width: 60px;
+      height: 60px;
+      background: #e74c3c;
+      border-radius: 15px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 24px;
+      flex-shrink: 0;
+      box-shadow: 0 4px 15px rgba(231, 76, 60, 0.3);
+    }
+
+    .sos-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .sos-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: #2c3e50;
+      margin-bottom: 2px;
+    }
+
+    .sos-type {
+      font-size: 16px;
+      font-weight: 600;
+      color: #34495e;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .sos-location {
+      font-size: 14px;
+      color: #7f8c8d;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .location-dot {
+      width: 8px;
+      height: 8px;
+      background: #e74c3c;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .sos-status {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-urgent {
+      background: rgba(231, 76, 60, 0.1);
+      color: #e74c3c;
+      border: 1px solid #e74c3c;
+    }
+
+    .status-resolved {
+      background: rgba(39, 174, 96, 0.1);
+      color: #27ae60;
+      border: 1px solid #27ae60;
+    }
+
+    .status-pending {
+      background: rgba(243, 156, 18, 0.1);
+      color: #f39c12;
+      border: 1px solid #f39c12;
+    }
+
+    .sos-meta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+      text-align: center;
+    }
+
+    .sos-time {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #34495e;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .sos-actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .audio-btn {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .audio-btn:hover {
+      background: #2980b9;
+      transform: scale(1.05);
+    }
+
+    .audio-btn:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .details-btn {
+      background: #e8f4fd;
+      color: #2c3e50;
+      border: 2px solid #ddd;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .details-btn:hover {
+      background: #d1e7dd;
+      border-color: #4CAF50;
+      transform: scale(1.05);
+    }
+
+    .no-data {
+      text-align: center;
+      color: white;
+      margin-top: 50px;
+      font-size: 18px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 40px;
+      border-radius: 20px;
+      backdrop-filter: blur(10px);
+    }
+
+    .loading {
+      text-align: center;
+      color: white;
+      margin-top: 50px;
+      font-size: 18px;
+    }
+
+    /* Modal Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #f0f0f0;
+      border-radius: 25px;
+      padding: 30px;
+      max-width: 600px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      border: 3px solid #333;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+    }
+
+
+
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 32px;
+      cursor: pointer;
+      color: #333;
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .close-btn:hover {
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 15px;
+      border: 3px solid #333;
+      border-radius: 25px;
+      font-size: 16px;
+      background: #e0e0e0;
+      color: #333;
+      outline: none;
+    }
+
+    .audio-player {
+      width: 100%;
+      margin-top: 10px;
+      border-radius: 10px;
+    }
+
+    @media (max-width: 768px) {
+      .sos-card {
+        flex-direction: column;
+        text-align: center;
+        gap: 15px;
+      }
+
+      .sos-meta {
+        flex-direction: row;
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .sos-actions {
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .modal-content {
+        margin: 10px;
+        padding: 20px;
+      }
+    }
+
+    .sos-card.walk_with_me {
+  border-left: 6px solid #23fff4; /* purple */
+  background: rgb(69, 215, 255);
+}
+
+    .priority-indicator {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .priority-urgent {
+      background: #e74c3c;
+      box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
+    }
+
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+      70% { box-shadow: 0 0 0 10px rgba(231, 76, 60, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>🆘 Active SOS Requests</h2>
+    <div class="sos-list" id="sos-list">
+      <div class="loading">Loading SOS requests...</div>
+    </div>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">SOS Request Details</h3>
+        <button class="close-btn" id="closeBtn">×</button>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input type="text" class="form-input" id="modalName" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <input type="text" class="form-input" id="modalType" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Status</label>
+        <input type="text" class="form-input" id="modalStatus" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Location</label>
+        <input type="text" class="form-input" id="modalLocation" readonly>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Timestamp</label>
+        <input type="text" class="form-input" id="modalTime" readonly>
+      </div>
+
+      <div class="form-group" id="audioGroup" style="display: none;">
+        <label class="form-label">Audio Recording</label>
+        <audio class="audio-player" id="modalAudio" controls>
+          Your browser does not support the audio element.
+        </audio>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+  // Import Firebase SDK
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
+    authDomain: "camshield-50aec.firebaseapp.com",
+    projectId: "camshield-50aec",
+    storageBucket: "camshield-50aec.firebasestorage.app", 
+    messagingSenderId: "655472977777",
+    appId: "1:655472977777:web:907fe040370301c08b78d0",
+    measurementId: "G-W4N2BLCEL3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // Modal Elements
+  const modalOverlay = document.getElementById('modalOverlay');
+  const closeBtn = document.getElementById('closeBtn');
+  const modalName = document.getElementById('modalName');
+  const modalType = document.getElementById('modalType');
+  const modalStatus = document.getElementById('modalStatus');
+  const modalLocation = document.getElementById('modalLocation');
+  const modalTime = document.getElementById('modalTime');
+  const modalAudio = document.getElementById('modalAudio');
+  const audioGroup = document.getElementById('audioGroup');
+
+  closeBtn.addEventListener('click', () => modalOverlay.classList.remove('active'));
+  modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) modalOverlay.classList.remove('active'); });
+
+  // Open modal
+  function openModal(sosData) {
+    modalName.value = sosData.name || sosData.Name || 'N/A';
+    modalType.value = sosData.type || sosData.Type || 'N/A';
+    modalStatus.value = sosData.status || sosData.Status || 'N/A';
+
+    // Location
+    let loc = "N/A";
+    const location = sosData.location || sosData.Location;
+    if (location) {
+      let lat, lon;
+      if (Array.isArray(location)) [lat, lon] = location;
+      else if (location.latitude != null && location.longitude != null) {
+        lat = parseFloat(location.latitude);
+        lon = parseFloat(location.longitude);
+      }
+      if (!isNaN(lat) && !isNaN(lon)) loc = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+    }
+    modalLocation.value = loc;
+
+    // Timestamp
+    let timeStr = "N/A";
+    const ts = sosData.timestamp || sosData.Time;
+    if (ts && typeof ts.toDate === 'function') {
+      timeStr = ts.toDate().toLocaleString();
+    } else if (ts) {
+      const date = new Date(ts);
+      if (!isNaN(date.getTime())) timeStr = date.toLocaleString();
+    }
+    modalTime.value = timeStr;
+
+    // Audio
+    const audioUrl = sosData.audioUrl1 || sosData.audioUrl || '';
+    if (audioUrl && audioUrl.startsWith('http')) {
+      modalAudio.src = audioUrl;
+      audioGroup.style.display = 'block';
+    } else audioGroup.style.display = 'none';
+
+    modalOverlay.classList.add('active');
+  }
+
+  // Helper functions
+  function getStatusClass(status) {
+    if (!status) return 'pending';
+    const s = status.toLowerCase();
+    if (s.includes('urgent') || s.includes('emergency')) return 'urgent';
+    if (s.includes('resolved') || s.includes('completed') || s.includes('responded')) return 'resolved';
+    return 'pending';
+  }
+
+  function getTypeIcon(type) {
+    if (!type) return '🆘';
+    const t = type.toLowerCase();
+    if (t.includes('medical')) return '🏥';
+    if (t.includes('fire')) return '🔥';
+    if (t.includes('security')) return '🔒';
+    if (t.includes('accident')) return '🚨';
+    if (t.includes('walkwithme')) return '🚶';
+    return '🆘';
+  }
+
+  // Play Audio
+  window.playAudio = function(url) {
+    if (!url || !url.startsWith('http')) return alert("No valid audio available for this SOS.");
+    new Audio(url).play().catch(() => alert("Error playing audio."));
+  }
+
+  // Respond to SOS (defined once outside the loop)
+  window.respondSOS = async function(docId) {
+    if (!docId) return;
+    try {
+      const sosRef = doc(db, "SOS", docId);
+      await updateDoc(sosRef, { status: "Responded" });
+      alert("✅ Status updated to Responded");
+      const statusDiv = document.querySelector(`.sos-status[data-id='${docId}']`);
+      if (statusDiv) statusDiv.textContent = "Responded";
+      const card = statusDiv.closest('.sos-card');
+      if (card) {
+        card.classList.remove('pending', 'urgent');
+        card.classList.add('resolved');
+        statusDiv.className = 'sos-status status-resolved';
+      }
+    } catch (err) {
+      console.error("Error updating status:", err);
+      alert("❌ Failed to update status");
+    }
+  }
+
+  // Show SOS Details
+  window.showSOSDetails = function(docId) {
+    const data = window.sosData[docId];
+    if (data) openModal(data);
+  }
+
+  // Load SOS Requests
+  async function loadSOS() {
+    const sosList = document.getElementById("sos-list");
+    sosList.innerHTML = `<div class="loading">Loading SOS requests...</div>`;
+    try {
+      const q = query(collection(db, "SOS"), orderBy("timestamp", "desc"));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        sosList.innerHTML = `<div class="no-data">No SOS requests found</div>`;
+        return;
+      }
+
+      sosList.innerHTML = "";
+      const sosData = {};
+
+      querySnapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        sosData[docId] = data;
+
+        // Location
+        let loc = "Unknown Location";
+        const location = data.location || data.Location;
+        if (location) {
+          let lat, lon;
+          if (Array.isArray(location)) [lat, lon] = location;
+          else if (location.latitude != null && location.longitude != null) {
+            lat = parseFloat(location.latitude);
+            lon = parseFloat(location.longitude);
+          }
+          if (!isNaN(lat) && !isNaN(lon)) loc = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
+        }
+
+        // Time
+        let timeDisplay = "N/A";
+        const ts = data.timestamp || data.Time;
+        let timestampDate;
+        if (ts && typeof ts.toDate === 'function') timestampDate = ts.toDate();
+        else timestampDate = new Date(ts);
+        if (timestampDate && !isNaN(timestampDate.getTime())) {
+          timeDisplay = timestampDate.toLocaleTimeString('en-US', { hour12:false, hour:'2-digit', minute:'2-digit' });
+        }
+
+        const name = data.name || data.Name || 'Unknown';
+        const type = data.type || data.Type || 'General Emergency';
+        const status = data.status || data.Status || 'Pending';
+        const audioUrl = data.audioUrl1 || data.audioUrl || '';
+
+        const statusClass = getStatusClass(status);
+        const typeIcon = getTypeIcon(type);
+        const typeClass = (type || '').toLowerCase().replace(/\s+/g, '_');
+
+        const sosCard = document.createElement("div");
+        sosCard.className = `sos-card ${statusClass} ${typeClass}`;
+        sosCard.innerHTML = `
+          ${statusClass === 'urgent' ? '<div class="priority-indicator priority-urgent"></div>' : ''}
+          <div class="sos-avatar">${typeIcon}</div>
+          <div class="sos-info">
+            <div class="sos-name">${name}</div>
+            <div class="sos-type">${type}</div>
+            <div class="sos-location">
+              <span class="location-dot"></span>${loc}
+            </div>
+            <div class="sos-status status-${statusClass}" data-id="${docId}">${status}</div>
+          </div>
+          <div class="sos-meta">
+            <div class="sos-time">🕐 ${timeDisplay}</div>
+            <div class="sos-actions">
+              <button class="audio-btn" onclick="playAudio('${audioUrl}')" ${!audioUrl.startsWith('http') ? 'disabled' : ''}>
+                🎧 ${audioUrl.startsWith('http') ? 'Play Audio' : 'No Audio'}
+              </button>
+              <button class="details-btn" onclick="showSOSDetails('${docId}')">Details</button>
+              <button class="details-btn" onclick="respondSOS('${docId}')">Respond</button>
+            </div>
+          </div>
+        `;
+        sosList.appendChild(sosCard);
+      });
+
+      window.sosData = sosData;
+    } catch (err) {
+      console.error("Error loading SOS requests:", err);
+      sosList.innerHTML = `<div class="no-data">Error loading SOS requests</div>`;
+    }
+  }
+
+  // Initial load + refresh
+  loadSOS();
+  setInterval(loadSOS, 30000);
+</script>

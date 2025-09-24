@@ -380,11 +380,6 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label">Location</label>
-        <input type="text" class="form-input" id="modalLocation" readonly>
-      </div>
-
-      <div class="form-group">
         <label class="form-label">Posted By</label>
         <input type="text" class="form-input" id="modalPostedBy" readonly>
       </div>
@@ -399,6 +394,12 @@
         <textarea class="form-textarea" id="modalDescription" readonly>Description</textarea>
       </div>
 
+<div id="imageFullscreenOverlay" 
+     style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;
+            background:rgba(0,0,0,0.9);justify-content:center;align-items:center;z-index:2000;">
+  <img id="fullscreenImage" style="max-width:90%;max-height:90%;border-radius:15px;">
+</div>
+
       <div class="form-group" id="imageGroup" style="display: none;">
         <label class="form-label">Incident Image</label>
         <div id="modalImageContainer">
@@ -406,9 +407,15 @@
         </div>
       </div>
 
+
+
       <button class="remove-btn" id="removeIncidentBtn">Remove Incident</button>
     </div>
   </div>
+
+
+
+  
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
@@ -439,7 +446,6 @@
     const closeBtn = document.getElementById('closeBtn');
     const removeBtn = document.getElementById('removeIncidentBtn');
     const modalTitle = document.getElementById('modalTitle');
-    const modalLocation = document.getElementById('modalLocation');
     const modalPostedBy = document.getElementById('modalPostedBy');
     const modalStatus = document.getElementById('modalStatus');
     const modalDescription = document.getElementById('modalDescription');
@@ -448,12 +454,13 @@
 
     // Resolve display name consistently
 function getDisplayName(data) {
-  // Admin-created post
-  if (data.postedby && data.postedby.toLowerCase() === "admin") {
-    return "Admin";
-  }
+  // Use postedBy field first
+  if (data.postedBy && data.postedBy.trim()) return data.postedBy.trim();
 
-  // Check for user fields
+  // If it was an admin
+  if (data.postedBy && data.postedBy.toLowerCase() === "admin") return "Admin";
+
+  // Fallbacks
   if (data.name && data.name.trim()) return data.name.trim();
   if (data.studentid || data.studentId) return `Student ${data.studentid || data.studentId}`;
   if (data.email) return data.email.split("@")[0];
@@ -470,8 +477,8 @@ function getDisplayName(data) {
       }
       
       // Fallback construction
-      const SUPABASE_URL = 'https://vjiegugevvdxnyjltqbr.supabase.co';
-      const BUCKET_NAME = 'Picture Incident Storage';
+      const SUPABASE_URL = 'https://tewchlxrvfuzusdnhynk.supabase.co';
+      const BUCKET_NAME = 'incident-images';
       return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET_NAME}/incidents/${encodeURIComponent(imagePath)}`;
 
       let cleanPath = imagePath.toString().trim().replace(/^\/+|\/+$/g, '');
@@ -502,7 +509,9 @@ function getDisplayName(data) {
           <img class="incident-image" 
                src="${imageUrl}" 
                alt="Incident Image"
-               loading="lazy">
+               loading="lazy"
+                      style="cursor: zoom-in;"
+       onclick="openImageFullscreen('${imageUrl}')">
         `;
       };
       
@@ -527,7 +536,6 @@ function getDisplayName(data) {
       currentIncidentId = incidentId;
 
       modalTitle.value = incidentData.title || "N/A";
-      modalLocation.value = incidentData.location || "N/A";
       modalStatus.value = incidentData.status || "N/A";
       modalDescription.value = incidentData.description || "N/A";
 
@@ -569,6 +577,22 @@ function getDisplayName(data) {
         }
       }
     });
+
+    const imageOverlay = document.getElementById("imageFullscreenOverlay");
+const fullscreenImg = document.getElementById("fullscreenImage");
+
+window.openImageFullscreen = function(url) {
+  fullscreenImg.src = url;
+  imageOverlay.style.display = "flex";
+};
+
+imageOverlay.addEventListener("click", () => {
+  imageOverlay.style.display = "none";
+  fullscreenImg.src = "";
+});
+
+
+
 
     // Load incidents with reference resolution
     async function loadIncidents() {
@@ -633,7 +657,6 @@ function getDisplayName(data) {
             <div class="incident-info">
               <div class="incident-name">${displayName}</div>
               <div class="incident-title">${data.title || "No Title"} ${hasImage ? '📷' : ''}</div>
-              <div class="incident-location">📍 ${data.location || "Unknown Location"}</div>
             </div>
             <div class="incident-meta">
               <div class="incident-time">🕐 ${timeString}</div>
