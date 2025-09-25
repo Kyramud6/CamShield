@@ -1,4 +1,4 @@
-// Fast Approximate + Gradual Refinement GoogleMapScreen.kt (No Cache)
+// Updated GoogleMapScreen.kt - Add callback for route info
 package com.camshield.app.components
 
 import android.Manifest
@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.widget.Toast
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,23 +34,40 @@ import kotlinx.coroutines.delay
 import android.os.Handler
 import android.os.Looper
 
-// Data classes (same as before)
+// Data classes for Directions API
 data class DirectionsResponse(val routes: List<Route>, val status: String)
 data class Route(val legs: List<Leg>, val overview_polyline: OverviewPolyline)
 data class Leg(val steps: List<Step>, val distance: Distance, val duration: Duration)
-data class Step(val html_instructions: String, val distance: Distance, val duration: Duration,
-                val start_location: LocationData, val end_location: LocationData, val polyline: OverviewPolyline, val maneuver: String?)
+data class Step(
+    val html_instructions: String,
+    val distance: Distance,
+    val duration: Duration,
+    val start_location: LocationData,
+    val end_location: LocationData,
+    val polyline: OverviewPolyline,
+    val maneuver: String?
+)
 data class Distance(val text: String, val value: Int)
 data class Duration(val text: String, val value: Int)
 data class LocationData(val lat: Double, val lng: Double)
 data class OverviewPolyline(val points: String)
-data class NavigationState(val isNavigating: Boolean = false, val currentStep: Step? = null,
-                           val stepIndex: Int = 0, val totalSteps: Int = 0, val distanceToDestination: String? = null)
+data class NavigationState(
+    val isNavigating: Boolean = false,
+    val currentStep: Step? = null,
+    val stepIndex: Int = 0,
+    val totalSteps: Int = 0,
+    val distanceToDestination: String? = null
+)
 
+// Retrofit interface for Directions API
 interface DirectionsService {
     @GET("maps/api/directions/json")
-    suspend fun getDirections(@Query("origin") origin: String, @Query("destination") destination: String,
-                              @Query("key") apiKey: String, @Query("mode") mode: String = "walking"): Response<DirectionsResponse>
+    suspend fun getDirections(
+        @Query("origin") origin: String,
+        @Query("destination") destination: String,
+        @Query("key") apiKey: String,
+        @Query("mode") mode: String = "walking"
+    ): Response<DirectionsResponse>
 }
 
 @Composable
@@ -59,7 +77,13 @@ fun GoogleMapScreen(
     currentLocationState: MutableState<String?>,
     locationPermissionGranted: Boolean,
     onNavigationUpdate: (NavigationState) -> Unit = {},
-    modifier: Modifier = Modifier
+    onLocationUpdate: (LatLng?) -> Unit = {},
+    modifier: Modifier = Modifier,
+    onRouteLoadingStateChanged: (Boolean) -> Unit = {},
+    // NEW: Callback for route info
+    onRouteInfoUpdate: (RouteInfo?) -> Unit = {},
+    shouldStartNavigation: Boolean = false,
+    onNavigationStarted: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
@@ -71,6 +95,7 @@ fun GoogleMapScreen(
     var locationAccuracy by remember { mutableStateOf<Float?>(null) }
     var locationSource by remember { mutableStateOf<String?>(null) }
     var isRefiningLocation by remember { mutableStateOf(false) }
+    var locationAge by remember { mutableStateOf<Long?>(null) }
 
     // Navigation states
     var routeSteps by remember { mutableStateOf<List<Step>>(emptyList()) }
@@ -86,24 +111,146 @@ fun GoogleMapScreen(
         }
     }
 
-    // FRESH LOCATION ONLY - NO CACHE
+    val directionsService = remember {
+        Retrofit.Builder()
+            .baseUrl("https://maps.googleapis.com/")
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(DirectionsService::class.java)
+    }
+
+    // NEW: Load route when destination is set (but don't start navigation)
+    LaunchedEffect(destinationLatLng, userLocation) {
+        if (destinationLatLng != null && userLocation != null && !isNavigating && !shouldStartNavigation) {
+            Log.d("Route", "Loading route preview from $userLocation to $destinationLatLng")
+            onRouteLoadingStateChanged(true)
+
+            getDirectionsAndLoadRoute(
+                service = directionsService,
+                origin = userLocation!!,
+                destination = destinationLatLng,
+                apiKey = getApiKey(),
+                onSuccess = { steps, polylinePoints, routeInfo ->
+                    Log.d("Route", "Route preview loaded with ${steps.size} steps")
+                    routeSteps = steps
+                    routePoints = polylinePoints
+                    // Update route info in the panel
+                    onRouteInfoUpdate(routeInfo)
+                    onRouteLoadingStateChanged(false)
+                    currentLocationState.value = "Route loaded - ready to navigate"
+                },
+                onError = { error ->
+                    Log.e("Route", "Route loading failed: $error")
+                    onRouteLoadingStateChanged(false)
+                    onRouteInfoUpdate(null)
+                    currentLocationState.value = "Route loading failed: $error"
+                }
+            )
+        }
+    }
+
+    // Navigation trigger - START navigation when button pressed
+    LaunchedEffect(shouldStartNavigation, destinationLatLng, userLocation) {
+        if (shouldStartNavigation && destinationLatLng != null && userLocation != null && !isNavigating) {
+            Log.d("Navigation", "Starting navigation from $userLocation to $destinationLatLng")
+
+            // If we already have route steps, start navigation immediately
+            if (routeSteps.isNotEmpty()) {
+                Log.d("Navigation", "Using existing route steps")
+                isNavigating = true
+                currentStepIndex = 0
+
+                onNavigationUpdate(NavigationState(
+                    isNavigating = true,
+                    currentStep = routeSteps.firstOrNull(),
+                    stepIndex = 0,
+                    totalSteps = routeSteps.size,
+                    distanceToDestination = calculateDistance(userLocation, destinationLatLng)
+                ))
+
+                onNavigationStarted()
+                currentLocationState.value = "Navigation started!"
+            } else {
+                // Need to load route first
+                onRouteLoadingStateChanged(true)
+                getDirectionsAndLoadRoute(
+                    service = directionsService,
+                    origin = userLocation!!,
+                    destination = destinationLatLng,
+                    apiKey = getApiKey(),
+                    onSuccess = { steps, polylinePoints, routeInfo ->
+                        Log.d("Navigation", "Route loaded and starting navigation with ${steps.size} steps")
+                        routeSteps = steps
+                        routePoints = polylinePoints
+                        isNavigating = true
+                        currentStepIndex = 0
+
+                        onNavigationUpdate(NavigationState(
+                            isNavigating = true,
+                            currentStep = steps.firstOrNull(),
+                            stepIndex = 0,
+                            totalSteps = steps.size,
+                            distanceToDestination = calculateDistance(userLocation, destinationLatLng)
+                        ))
+
+                        onNavigationStarted()
+                        onRouteLoadingStateChanged(false)
+                        currentLocationState.value = "Navigation started!"
+                    },
+                    onError = { error ->
+                        Log.e("Navigation", "Navigation failed: $error")
+                        onRouteLoadingStateChanged(false)
+                        currentLocationState.value = "Navigation failed: $error"
+                        Toast.makeText(context, "Navigation failed: $error", Toast.LENGTH_LONG).show()
+                    }
+                )
+            }
+        }
+    }
+
+    // Reset navigation when destination changes
+    LaunchedEffect(destinationLatLng) {
+        if (isNavigating) {
+            isNavigating = false
+            routeSteps = emptyList()
+            routePoints = emptyList()
+            currentStepIndex = 0
+            onNavigationUpdate(NavigationState())
+            onRouteInfoUpdate(null)
+        }
+    }
+
+    // CACHE FIRST + FRESH LOCATION REFINEMENT
     LaunchedEffect(hasLocationPermission) {
         if (hasLocationPermission) {
-            getFreshLocationWithGradualRefinement(fusedLocationClient) { location, accuracy, source, isRefining ->
+            getCachedThenFreshLocationWithRefinement(fusedLocationClient) { location, accuracy, source, age, isRefining ->
                 userLocation = location
                 locationAccuracy = accuracy
                 locationSource = source
+                locationAge = age
                 isLocationLoading = false
                 isRefiningLocation = isRefining
 
-                val accuracyText = if (accuracy <= 50f) "High accuracy"
-                else if (accuracy <= 100f) "Good accuracy"
-                else "Approximate location"
+                // Update parent component
+                onLocationUpdate(location)
 
-                currentLocationState.value = if (isRefining) {
-                    "Improving accuracy... ($accuracyText)"
-                } else {
-                    "Location found! ($accuracyText)"
+                val ageText = when {
+                    age < 30000 -> "Fresh"
+                    age < 300000 -> "Recent"
+                    else -> "Cached"
+                }
+
+                val accuracyText = when {
+                    accuracy <= 20f -> "Excellent"
+                    accuracy <= 50f -> "Good"
+                    accuracy <= 100f -> "Fair"
+                    else -> "Poor"
+                }
+
+                currentLocationState.value = when {
+                    isRefining -> "Improving location... ($accuracyText • $ageText)"
+                    age < 30000 -> "Current location ($accuracyText)"
+                    else -> "Location found ($accuracyText • $ageText)"
                 }
             }
         } else {
@@ -121,6 +268,10 @@ fun GoogleMapScreen(
                     userLocation = newLocation
                     locationAccuracy = location.accuracy
                     locationSource = location.provider?.uppercase() ?: "GPS"
+                    locationAge = System.currentTimeMillis() - location.time
+
+                    // Update parent component
+                    onLocationUpdate(newLocation)
 
                     // Update navigation if active
                     if (isNavigating && routeSteps.isNotEmpty()) {
@@ -133,6 +284,12 @@ fun GoogleMapScreen(
                                 totalSteps = routeSteps.size,
                                 distanceToDestination = calculateDistance(newLocation, destinationLatLng)
                             ))
+
+                            // Check if navigation is complete
+                            if (newIndex >= routeSteps.size - 1) {
+                                Log.d("Navigation", "Navigation completed!")
+                                currentLocationState.value = "Destination reached!"
+                            }
                         }
                     }
                 }
@@ -160,14 +317,6 @@ fun GoogleMapScreen(
         onDispose {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         }
-    }
-
-    val directionsService = remember {
-        Retrofit.Builder()
-            .baseUrl("https://maps.googleapis.com/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-            .create(DirectionsService::class.java)
     }
 
     val campusBoundary = listOf(
@@ -225,22 +374,41 @@ fun GoogleMapScreen(
 
             // User location marker with accuracy circle
             userLocation?.let { location ->
-                // Accuracy circle
+                // Accuracy circle - color based on accuracy and age
                 locationAccuracy?.let { accuracy ->
+                    val circleColor = when {
+                        locationAge != null && locationAge!! > 300000 -> Color.Gray.copy(alpha = 0.3f) // Old location
+                        accuracy <= 50f -> Color.Blue.copy(alpha = 0.3f) // Good accuracy
+                        else -> Color.Yellow.copy(alpha = 0.3f) // Poor accuracy
+                    }
+
                     Circle(
                         center = location,
                         radius = accuracy.toDouble(),
-                        strokeColor = Color.Blue.copy(alpha = 0.3f),
-                        fillColor = Color.Blue.copy(alpha = 0.1f),
+                        strokeColor = circleColor,
+                        fillColor = circleColor.copy(alpha = 0.1f),
                         strokeWidth = 2f
                     )
                 }
 
-                // Location marker
+                // Location marker with age indicator
+                val markerSnippet = buildString {
+                    append("±${locationAccuracy?.toInt() ?: 0}m accuracy")
+                    locationSource?.let { append(" • $it") }
+                    locationAge?.let { age ->
+                        val ageSeconds = age / 1000
+                        when {
+                            ageSeconds < 60 -> append(" • ${ageSeconds}s ago")
+                            ageSeconds < 3600 -> append(" • ${ageSeconds/60}m ago")
+                            else -> append(" • ${ageSeconds/3600}h ago")
+                        }
+                    }
+                }
+
                 Marker(
                     state = MarkerState(position = location),
                     title = "Your Location",
-                    snippet = "${locationAccuracy?.toInt()}m accuracy • ${locationSource ?: "GPS"}"
+                    snippet = markerSnippet
                 )
             }
 
@@ -248,33 +416,47 @@ fun GoogleMapScreen(
             destinationLatLng?.let {
                 Marker(
                     state = MarkerState(position = it),
-                    title = "Destination"
+                    title = "Destination",
+                    snippet = if (isNavigating) "Navigating here" else "Tap Start Navigation"
                 )
             }
 
-            // Route visualization
+            // Route visualization - Enhanced for better visibility
             if (routePoints.size > 1) {
                 Polyline(
                     points = routePoints,
-                    color = if (isNavigating) Color(0xFF1976D2) else Color.Gray,
-                    width = if (isNavigating) 12f else 8f
+                    color = if (isNavigating) Color(0xFF1976D2) else Color(0xFF757575),
+                    width = if (isNavigating) 8f else 5f
                 )
             }
 
-            // Navigation step markers
+            // Navigation step markers - Only show current and next step
             if (isNavigating && routeSteps.isNotEmpty()) {
-                routeSteps.forEachIndexed { index, step ->
-                    val position = LatLng(step.start_location.lat, step.start_location.lng)
+                // Current step marker
+                if (currentStepIndex < routeSteps.size) {
+                    val currentStep = routeSteps[currentStepIndex]
+                    val position = LatLng(currentStep.start_location.lat, currentStep.start_location.lng)
                     Marker(
                         state = MarkerState(position = position),
-                        title = "Step ${index + 1}",
-                        snippet = cleanHtmlInstructions(step.html_instructions)
+                        title = "Current Step",
+                        snippet = cleanHtmlInstructions(currentStep.html_instructions)
+                    )
+                }
+
+                // Next step marker
+                if (currentStepIndex + 1 < routeSteps.size) {
+                    val nextStep = routeSteps[currentStepIndex + 1]
+                    val position = LatLng(nextStep.start_location.lat, nextStep.start_location.lng)
+                    Marker(
+                        state = MarkerState(position = position),
+                        title = "Next Step",
+                        snippet = cleanHtmlInstructions(nextStep.html_instructions)
                     )
                 }
             }
         }
 
-        // Loading indicator - only shows initially
+        // Loading indicator - only shows initially and briefly
         if (isLocationLoading && hasLocationPermission) {
             Card(
                 modifier = Modifier
@@ -291,7 +473,7 @@ fun GoogleMapScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
-                    Text("Finding your location...")
+                    Text("Getting your location...")
                 }
             }
         }
@@ -312,7 +494,7 @@ fun GoogleMapScreen(
             }
         }
 
-        // Location accuracy indicator with refinement status
+        // Enhanced location info panel
         locationAccuracy?.let { accuracy ->
             Card(
                 modifier = Modifier
@@ -320,9 +502,10 @@ fun GoogleMapScreen(
                     .padding(16.dp),
                 colors = CardDefaults.cardColors(
                     containerColor = when {
+                        locationAge != null && locationAge!! > 300000 -> Color(0xFF9E9E9E).copy(alpha = 0.9f) // Old - Gray
                         accuracy <= 10f -> Color(0xFF4CAF50).copy(alpha = 0.9f) // Excellent
                         accuracy <= 30f -> Color(0xFF8BC34A).copy(alpha = 0.9f) // Good
-                        accuracy <= 100f -> Color(0xFFFF9800).copy(alpha = 0.9f) // Fair
+                        accuracy <= 100f -> Color(0xFFFFC107).copy(alpha = 0.9f) // Fair - Yellow
                         else -> Color(0xFFF44336).copy(alpha = 0.9f) // Poor
                     }
                 )
@@ -345,71 +528,38 @@ fun GoogleMapScreen(
                             color = Color.White
                         )
                     }
-                    Text(
-                        text = locationSource ?: "GPS",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color.White.copy(alpha = 0.8f)
-                    )
-                    if (isRefiningLocation) {
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
                         Text(
-                            text = "Refining...",
+                            text = locationSource ?: "GPS",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White.copy(alpha = 0.8f)
                         )
-                    }
-                }
-            }
-        }
 
-        // Navigation controls
-        if (destinationLatLng != null && userLocation != null) {
-            Row(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (!isNavigating) {
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                getDirectionsAndStartNavigation(
-                                    directionsService,
-                                    userLocation!!,
-                                    destinationLatLng,
-                                    "YOUR_API_KEY_HERE",
-                                    onSuccess = { steps, points ->
-                                        routeSteps = steps
-                                        routePoints = points
-                                        isNavigating = true
-                                        currentStepIndex = 0
-                                        onNavigationUpdate(NavigationState(
-                                            isNavigating = true,
-                                            currentStep = steps.firstOrNull(),
-                                            stepIndex = 0,
-                                            totalSteps = steps.size,
-                                            distanceToDestination = calculateDistance(userLocation!!, destinationLatLng)
-                                        ))
-                                    },
-                                    onError = { error ->
-                                        Toast.makeText(context, "Navigation error: $error", Toast.LENGTH_LONG).show()
-                                    }
-                                )
+                        // Age indicator
+                        locationAge?.let { age ->
+                            val ageText = when {
+                                age < 30000 -> "●" // Fresh - solid dot
+                                age < 300000 -> "◐" // Recent - half dot
+                                else -> "○" // Old - empty dot
                             }
+                            Text(
+                                text = ageText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
                         }
-                    ) {
-                        Text("Start Navigation")
                     }
-                } else {
-                    Button(
-                        onClick = {
-                            isNavigating = false
-                            routeSteps = emptyList()
-                            currentStepIndex = 0
-                            onNavigationUpdate(NavigationState(isNavigating = false))
-                        }
-                    ) {
-                        Text("Stop Navigation")
+
+                    if (isRefiningLocation) {
+                        Text(
+                            text = "Updating...",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.8f)
+                        )
                     }
                 }
             }
@@ -423,145 +573,222 @@ fun GoogleMapScreen(
             val accuracy = locationAccuracy?.let {
                 if (it <= 50f) "accurate" else if (it <= 100f) "approximate" else "rough"
             } ?: "location"
-            currentLocationState.value = "$boundary ($accuracy)"
+
+            val age = locationAge?.let { ageMs ->
+                val ageSeconds = ageMs / 1000
+                when {
+                    ageSeconds < 60 -> "fresh"
+                    ageSeconds < 300 -> "recent"
+                    else -> "cached"
+                }
+            } ?: "unknown"
+
+            if (!isNavigating) { // Don't override navigation messages
+                currentLocationState.value = "$boundary ($accuracy • $age)"
+            }
         }
     }
 }
 
-// FRESH LOCATION ONLY - LOW TO HIGH ACCURACY APPROACH
+// NEW: Function to load route (without starting navigation)
+suspend fun getDirectionsAndLoadRoute(
+    service: DirectionsService,
+    origin: LatLng,
+    destination: LatLng,
+    apiKey: String,
+    onSuccess: (List<Step>, List<LatLng>, RouteInfo) -> Unit,
+    onError: (String) -> Unit
+) {
+    withContext(Dispatchers.IO) {
+        try {
+            val originStr = "${origin.latitude},${origin.longitude}"
+            val destinationStr = "${destination.latitude},${destination.longitude}"
+
+            Log.d("Route", "Fetching route: $originStr -> $destinationStr")
+
+            val response = service.getDirections(originStr, destinationStr, apiKey)
+
+            if (response.isSuccessful) {
+                val directionsResponse = response.body()
+
+                if (directionsResponse?.status == "OK" && directionsResponse.routes.isNotEmpty()) {
+                    val route = directionsResponse.routes[0]
+                    val steps = route.legs.flatMap { it.steps }
+                    val polylinePoints = decodePolyline(route.overview_polyline.points)
+                    val routeInfo = extractRouteInfo(route)
+
+                    Log.d("Route", "Route loaded: ${steps.size} steps, ${polylinePoints.size} points")
+
+                    withContext(Dispatchers.Main) {
+                        onSuccess(steps, polylinePoints, routeInfo)
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        onError("No route found: ${directionsResponse?.status ?: "Unknown error"}")
+                    }
+                }
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e("Route", "API Error: ${response.code()} ${response.message()}")
+                Log.e("Route", "Error body: $errorBody")
+
+                withContext(Dispatchers.Main) {
+                    onError("API request failed: ${response.code()} ${response.message()}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("Route", "Exception: ${e.message}", e)
+            withContext(Dispatchers.Main) { onError(e.message ?: "Unknown error") }
+        }
+    }
+}
+
+// API Key configuration - Replace with your actual Google Maps API key
+fun getApiKey(): String {
+    // TODO: Replace with your actual Google Directions API key
+    // Get it from: https://console.cloud.google.com/apis/credentials
+    return "AIzaSyCPmhj7Hot40l9AMeJq8dKPJ-7UHq5-S3E" // Replace this with your real API key
+}
+
+// CACHE FIRST + FRESH REFINEMENT APPROACH
 @SuppressLint("MissingPermission")
-fun getFreshLocationWithGradualRefinement(
+fun getCachedThenFreshLocationWithRefinement(
     fusedLocationClient: FusedLocationProviderClient,
-    onLocationUpdate: (LatLng, Float, String, Boolean) -> Unit
+    onLocationUpdate: (LatLng, Float, String, Long, Boolean) -> Unit
 ) {
     var bestAccuracy = Float.MAX_VALUE
-    var hasFoundInitialLocation = false
+    var hasShownCachedLocation = false
 
-    // STEP 1: Start with low accuracy, fast network-based location
-    val networkLocationRequest = LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 2000L)
-        .setMaxUpdateDelayMillis(5000L)
+    // STEP 1: Get cached location immediately for instant feedback
+    fusedLocationClient.lastLocation.addOnSuccessListener { cachedLocation ->
+        cachedLocation?.let { location ->
+            val age = System.currentTimeMillis() - location.time
+            hasShownCachedLocation = true
+            bestAccuracy = location.accuracy
+
+            onLocationUpdate(
+                LatLng(location.latitude, location.longitude),
+                location.accuracy,
+                "CACHED",
+                age,
+                true // Always refining when showing cached
+            )
+        }
+    }
+
+    // STEP 2: Start getting fresh location immediately (parallel with cache)
+    val freshLocationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000L)
+        .setMaxUpdateDelayMillis(3000L)
         .setMaxUpdates(2)
         .setWaitForAccurateLocation(false)
         .build()
 
-    val networkCallback = object : LocationCallback() {
+    val freshCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
             locationResult.lastLocation?.let { location ->
-                if (!hasFoundInitialLocation) {
-                    hasFoundInitialLocation = true
+                val age = System.currentTimeMillis() - location.time
+
+                // Always update if this is the first location OR if accuracy improved significantly
+                if (!hasShownCachedLocation || location.accuracy < bestAccuracy * 0.8f) {
                     bestAccuracy = location.accuracy
+                    hasShownCachedLocation = true
+
                     onLocationUpdate(
                         LatLng(location.latitude, location.longitude),
                         location.accuracy,
-                        "NETWORK",
-                        true // Still refining
+                        location.provider?.uppercase() ?: "GPS",
+                        age,
+                        location.accuracy > 30f // Still refining if accuracy > 30m
                     )
                 }
             }
         }
     }
 
-    // Start with low accuracy first
-    fusedLocationClient.requestLocationUpdates(networkLocationRequest, networkCallback, null)
+    // Start fresh location request
+    fusedLocationClient.requestLocationUpdates(freshLocationRequest, freshCallback, null)
 
-    // STEP 2: After getting initial location, upgrade to balanced accuracy
+    // STEP 3: If we still don't have good accuracy after 4 seconds, try high accuracy
     Handler(Looper.getMainLooper()).postDelayed({
-        val balancedLocationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 1000L)
-            .setMaxUpdateDelayMillis(5000L)
-            .setMaxUpdates(3)
-            .setWaitForAccurateLocation(false)
-            .build()
+        if (bestAccuracy > 50f) {
+            val highAccuracyRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
+                .setMaxUpdateDelayMillis(6000L)
+                .setMaxUpdates(3)
+                .setWaitForAccurateLocation(false)
+                .build()
 
-        val balancedCallback = object : LocationCallback() {
-            override fun onLocationResult(locationResult: LocationResult) {
-                locationResult.lastLocation?.let { location ->
-                    if (location.accuracy < bestAccuracy) {
-                        bestAccuracy = location.accuracy
+            val highAccuracyCallback = object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    locationResult.lastLocation?.let { location ->
+                        val age = System.currentTimeMillis() - location.time
+
+                        if (location.accuracy < bestAccuracy) {
+                            bestAccuracy = location.accuracy
+                            onLocationUpdate(
+                                LatLng(location.latitude, location.longitude),
+                                location.accuracy,
+                                "GPS",
+                                age,
+                                location.accuracy > 20f // Still refining if accuracy > 20m
+                            )
+                        }
+                    }
+                }
+            }
+
+            fusedLocationClient.requestLocationUpdates(highAccuracyRequest, highAccuracyCallback, null)
+
+            // Clean up high accuracy after 6 seconds
+            Handler(Looper.getMainLooper()).postDelayed({
+                fusedLocationClient.removeLocationUpdates(highAccuracyCallback)
+            }, 6000)
+        }
+
+        // Clean up fresh location callback
+        fusedLocationClient.removeLocationUpdates(freshCallback)
+    }, 4000)
+
+    // If no cached location was available, ensure we still show something within 2 seconds
+    Handler(Looper.getMainLooper()).postDelayed({
+        if (!hasShownCachedLocation) {
+            // Trigger a quick low-power location request as fallback
+            val quickLocationRequest = LocationRequest.Builder(Priority.PRIORITY_LOW_POWER, 1000L)
+                .setMaxUpdateDelayMillis(2000L)
+                .setMaxUpdates(1)
+                .build()
+
+            val quickCallback = object : LocationCallback() {
+                override fun onLocationResult(locationResult: LocationResult) {
+                    locationResult.lastLocation?.let { location ->
+                        val age = System.currentTimeMillis() - location.time
                         onLocationUpdate(
                             LatLng(location.latitude, location.longitude),
                             location.accuracy,
-                            "GPS",
-                            location.accuracy > 30f // Still refining if accuracy > 30m
+                            "NETWORK",
+                            age,
+                            true
                         )
                     }
                 }
             }
+
+            fusedLocationClient.requestLocationUpdates(quickLocationRequest, quickCallback, null)
+
+            // Clean up quick callback
+            Handler(Looper.getMainLooper()).postDelayed({
+                fusedLocationClient.removeLocationUpdates(quickCallback)
+            }, 2000)
         }
-
-        fusedLocationClient.requestLocationUpdates(balancedLocationRequest, balancedCallback, null)
-
-        // STEP 3: Finally, upgrade to high accuracy if needed
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (bestAccuracy > 50f) { // Only use high accuracy if we still don't have good accuracy
-                val gpsLocationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000L)
-                    .setMaxUpdateDelayMillis(8000L)
-                    .setMaxUpdates(4)
-                    .setWaitForAccurateLocation(false)
-                    .build()
-
-                val gpsCallback = object : LocationCallback() {
-                    override fun onLocationResult(locationResult: LocationResult) {
-                        locationResult.lastLocation?.let { location ->
-                            if (location.accuracy < bestAccuracy) {
-                                bestAccuracy = location.accuracy
-                                onLocationUpdate(
-                                    LatLng(location.latitude, location.longitude),
-                                    location.accuracy,
-                                    "GPS",
-                                    location.accuracy > 20f // Still refining if accuracy > 20m
-                                )
-                            }
-                        }
-                    }
-                }
-
-                fusedLocationClient.requestLocationUpdates(gpsLocationRequest, gpsCallback, null)
-
-                // Clean up high accuracy after 8 seconds
-                Handler(Looper.getMainLooper()).postDelayed({
-                    fusedLocationClient.removeLocationUpdates(gpsCallback)
-                }, 8000)
-            }
-
-            // Clean up balanced accuracy
-            fusedLocationClient.removeLocationUpdates(balancedCallback)
-        }, 5000) // Wait 5 seconds before trying high accuracy
-
-        // Clean up network callback
-        fusedLocationClient.removeLocationUpdates(networkCallback)
-    }, 3000) // Wait 3 seconds before upgrading from low power
+    }, 1000)
 }
 
-// Keep all existing helper functions
-suspend fun getDirectionsAndStartNavigation(
-    service: DirectionsService, origin: LatLng, destination: LatLng, apiKey: String,
-    onSuccess: (List<Step>, List<LatLng>) -> Unit, onError: (String) -> Unit
+// Navigation helper functions
+fun updateNavigationProgress(
+    currentLocation: LatLng,
+    steps: List<Step>,
+    currentStepIndex: Int,
+    onStepChanged: (Int) -> Unit
 ) {
-    withContext(Dispatchers.IO) {
-        try {
-            val originStr = "${origin.latitude},${origin.longitude}"
-            val destinationStr = "${destination.latitude},${destination.longitude}"
-            val response = service.getDirections(originStr, destinationStr, apiKey)
-            if (response.isSuccessful) {
-                val directionsResponse = response.body()
-                if (directionsResponse?.status == "OK" && directionsResponse.routes.isNotEmpty()) {
-                    val route = directionsResponse.routes[0]
-                    val steps = route.legs.flatMap { it.steps }
-                    val polylinePoints = decodePolyline(route.overview_polyline.points)
-                    withContext(Dispatchers.Main) { onSuccess(steps, polylinePoints) }
-                } else {
-                    withContext(Dispatchers.Main) { onError("No route found") }
-                }
-            } else {
-                withContext(Dispatchers.Main) { onError("API request failed") }
-            }
-        } catch (e: Exception) {
-            withContext(Dispatchers.Main) { onError(e.message ?: "Unknown error") }
-        }
-    }
-}
-
-fun updateNavigationProgress(currentLocation: LatLng, steps: List<Step>, currentStepIndex: Int, onStepChanged: (Int) -> Unit) {
     if (currentStepIndex < steps.size) {
         val currentStep = steps[currentStepIndex]
         val stepEndLocation = LatLng(currentStep.end_location.lat, currentStep.end_location.lng)

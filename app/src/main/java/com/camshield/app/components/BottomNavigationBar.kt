@@ -37,7 +37,6 @@ fun ModernBottomNavigationBar(
             .fillMaxWidth()
             .height(80.dp),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
         shadowElevation = 8.dp
     ) {
         Row(

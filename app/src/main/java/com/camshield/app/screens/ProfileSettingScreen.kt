@@ -60,8 +60,8 @@ fun ProfileSettingScreen() {
     // Modern gradient colors
     val primaryGradient = Brush.horizontalGradient(
         colors = listOf(
-            Color(0xFF667eea),
-            Color(0xFF764ba2)
+            Color(0xFF4b35f0),
+            Color(0xFF00f2a6)
         )
     )
 
@@ -479,7 +479,9 @@ fun MobileProfileSection() {
                     value = faculty,
                     onValueChange = { },
                     icon = Icons.Outlined.School,
-                    isEditable = false
+                    isEditable = false,
+                    singleLine = false,
+                    maxLines = Int.MAX_VALUE
                 )
                 MobileTextField(
                     label = "Student ID",
@@ -669,7 +671,7 @@ fun MobileProfileSection() {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(58.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF48BB78)
             ),
@@ -689,12 +691,6 @@ fun MobileProfileSection() {
                     fontWeight = FontWeight.Bold
                 )
             } else {
-                Icon(
-                    imageVector = Icons.Default.Save,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     "Save Changes",
                     fontSize = 16.sp,
@@ -960,7 +956,7 @@ fun MobileMedicalInfoSection() {
                         readOnly = true,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(56.dp)
+                            .height(64.dp)
                             .menuAnchor(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -1161,7 +1157,7 @@ fun MobileMedicalInfoSection() {
                     db.collection("Users").document(userId)
                         .set(mapOf("medicalInfo" to medicalData), SetOptions.merge())
                         .addOnSuccessListener {
-                            saveMessage = "✅ Medical information saved successfully!"
+                            saveMessage = "Medical information saved successfully!"
                         }
                         .addOnFailureListener { exception ->
                             saveMessage = "❌ Failed to save medical information: ${exception.message}"
@@ -1172,7 +1168,7 @@ fun MobileMedicalInfoSection() {
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(58.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF48BB78)
             ),
@@ -1192,12 +1188,6 @@ fun MobileMedicalInfoSection() {
                     fontWeight = FontWeight.Bold
                 )
             } else {
-                Icon(
-                    imageVector = Icons.Default.Save,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     "Save Medical Information",
                     fontSize = 16.sp,
@@ -1245,7 +1235,9 @@ fun MobileTextField(
     isEditable: Boolean,
     keyboardType: KeyboardType = KeyboardType.Text,
     placeholder: String = "",
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = true,   // default single line
+    maxLines: Int = 1
 ) {
     OutlinedTextField(
         value = value,
@@ -1271,7 +1263,7 @@ fun MobileTextField(
             }
         } else null,
         enabled = isEditable,
-        modifier = modifier.fillMaxWidth().height(56.dp),
+        modifier = modifier.fillMaxWidth().height(64.dp),
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         shape = RoundedCornerShape(12.dp),
         textStyle = MaterialTheme.typography.bodyMedium,
@@ -1321,7 +1313,7 @@ fun MobilePasswordField(
         visualTransformation = if (passwordVisible) VisualTransformation.None
         else PasswordVisualTransformation(),
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-        modifier = Modifier.fillMaxWidth().height(56.dp),
+        modifier = Modifier.fillMaxWidth().height(64.dp),
         shape = RoundedCornerShape(12.dp),
         textStyle = MaterialTheme.typography.bodyMedium,
         colors = OutlinedTextFieldDefaults.colors(

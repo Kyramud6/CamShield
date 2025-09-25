@@ -1,5 +1,14 @@
 package com.camshield.app.screens
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -84,7 +93,8 @@ import kotlinx.coroutines.tasks.await
 @Composable
 fun FullScreenImageViewer(
     imageUrl: String,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    startAtOriginalScale: Boolean = false
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -94,13 +104,38 @@ fun FullScreenImageViewer(
             usePlatformDefaultWidth = false
         )
     ) {
-        Box(
+        var scale by remember { mutableStateOf(1f) }
+        var offset by remember { mutableStateOf(Offset.Zero) }
+
+        var intrinsicW by remember { mutableStateOf<Int?>(null) }
+        var intrinsicH by remember { mutableStateOf<Int?>(null) }
+        var initialApplied by remember { mutableStateOf(false) }
+
+        val transformState = rememberTransformableState { zoom, pan, _ ->
+            scale = (scale * zoom).coerceIn(1f, 5f)
+            if (scale > 1f) offset += pan else offset = Offset.Zero
+        }
+
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.95f))
-                .clickable { onDismiss() },
-            contentAlignment = Alignment.Center
         ) {
+            val density = LocalDensity.current
+            val vpW = with(density) { maxWidth.toPx() }
+            val vpH = with(density) { maxHeight.toPx() }
+
+            // Apply original-scale once at start
+            LaunchedEffect(intrinsicW, intrinsicH, vpW, vpH, startAtOriginalScale) {
+                val iw = intrinsicW?.toFloat()
+                val ih = intrinsicH?.toFloat()
+                if (startAtOriginalScale && !initialApplied && iw != null && ih != null && vpW > 0 && vpH > 0) {
+                    val originalScale = maxOf(1f, minOf(iw / vpW, ih / vpH))
+                    scale = originalScale.coerceIn(1f, 5f)
+                    initialApplied = true
+                }
+            }
+
             // Close button
             IconButton(
                 onClick = onDismiss,
@@ -110,6 +145,7 @@ fun FullScreenImageViewer(
                     .size(48.dp)
                     .clip(CircleShape)
                     .background(Color.Black.copy(alpha = 0.5f))
+                    .zIndex(2f) // always on top
             ) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -119,19 +155,51 @@ fun FullScreenImageViewer(
                 )
             }
 
-            // Full-screen image
+            // Image with zoom/pan and also closes on tap
             AsyncImage(
                 model = imageUrl,
                 contentDescription = "Full Screen Incident Image",
                 contentScale = ContentScale.Fit,
+                onSuccess = { state ->
+                    intrinsicW = state.result.drawable.intrinsicWidth
+                    intrinsicH = state.result.drawable.intrinsicHeight
+                },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(24.dp)
-                    .clickable(enabled = false) { } // Prevent dismissing when clicking on image
+                    .align(Alignment.Center)
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
+                    .transformable(transformState)
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { onDismiss() }, // ✅ tap photo to close
+                            onDoubleTap = {
+                                if (scale > 1f) {
+                                    scale = 1f; offset = Offset.Zero
+                                } else {
+                                    scale = 2f
+                                }
+                            }
+                        )
+                    }
+            )
+
+            // Backdrop tap closes too
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(Color.Transparent)
+                    .clickable(onClick = onDismiss)
             )
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,6 +207,7 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
     var incidents by remember { mutableStateOf<List<IncidentReport>>(emptyList()) }
     var showAddForm by remember { mutableStateOf(false) }
     var selectedImageUrl by remember { mutableStateOf<String?>(null) }
+    var openAtOriginalScale by remember { mutableStateOf(false) }   // ✅ add
 
     // Load incidents from Firestore
     LaunchedEffect(Unit) {
@@ -174,7 +243,8 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
     selectedImageUrl?.let { imageUrl ->
         FullScreenImageViewer(
             imageUrl = imageUrl,
-            onDismiss = { selectedImageUrl = null }
+            onDismiss = { selectedImageUrl = null; openAtOriginalScale = false },
+            startAtOriginalScale = openAtOriginalScale              // ✅ add
         )
     }
 
@@ -289,7 +359,11 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
                     ) {
                         ModernIncidentCard(
                             incident = incident,
-                            onClick = { /* handle click */ }
+                            onClick = { /* ... */ },
+                            onImageClick = { url ->
+                                selectedImageUrl = url
+                                openAtOriginalScale = true           // ✅ open at 1:1 scale
+                            }
                         )
                     }
                 }
@@ -311,219 +385,172 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
 @Composable
 fun AddIncidentFormOverlay(
     onDismiss: () -> Unit,
-    onSubmit: (String, String, String?) -> Unit
+    onSubmit: (String, String, String) -> Unit
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
     var title by remember { mutableStateOf(TextFieldValue("")) }
     var description by remember { mutableStateOf(TextFieldValue("")) }
     var selectedImageUri by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    // Image picker
+    // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { selectedImageUri = it.toString() }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-            usePlatformDefaultWidth = false
-        )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x80000000))
+            .clickable(onClick = onDismiss)
     ) {
-        Box(
+        Card(
             modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .clickable { onDismiss() },
-            contentAlignment = Alignment.Center
+                .fillMaxWidth()
+                .padding(16.dp)
+                .align(Alignment.Center),
+            shape = RoundedCornerShape(16.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .clickable(enabled = false) { },
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                elevation = CardDefaults.cardElevation(16.dp)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp)
+                Text(
+                    "Report Incident",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+
+                // Title input
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Title") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Description input
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 4
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Image picker
+                Button(
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Header
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "New Post",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF2D3748)
-                        )
+                    Text("Pick Image")
+                }
 
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFF7FAFC))
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Close",
-                                tint = Color(0xFF4A5568),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    // Title Field
-                    Text("Title", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF2D3748))
+                selectedImageUri?.let {
                     Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Enter incident title...", color = Color(0xFFA0AEC0)) },
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF667eea),
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            cursorColor = Color(0xFF667eea)
-                        )
-                    )
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    // Description Field
-                    Text("Description", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF2D3748))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = description,
-                        onValueChange = { description = it },
+                    AsyncImage(
+                        model = it,
+                        contentDescription = "Selected Image",
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(120.dp),
-                        placeholder = { Text("Describe the incident in detail...", color = Color(0xFFA0AEC0)) },
-                        shape = RoundedCornerShape(12.dp),
-                        maxLines = 5,
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Color(0xFF667eea),
-                            unfocusedBorderColor = Color(0xFFE2E8F0),
-                            cursorColor = Color(0xFF667eea)
-                        )
+                            .height(200.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
                     )
+                }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                    // Image Upload Section
-                    Text("Attach Image", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF2D3748))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { imagePickerLauncher.launch("image/*") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = Color(0xFF667eea)
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (selectedImageUri != null) Color(0xFF38A169) else Color(0xFFE2E8F0)
-                        )
-                    ) {
-                        Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (selectedImageUri != null) "Image Selected" else "Select Image to Upload",
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
+                // Submit button
+                Button(
+                    onClick = {
+                        if (title.text.isNotBlank() && description.text.isNotBlank()) {
+                            isLoading = true
+                            scope.launch {
+                                try {
+                                    val currentUser = FirebaseAuth.getInstance().currentUser
+                                    val userId = currentUser?.uid ?: throw Exception("User not logged in")
 
-                    Spacer(modifier = Modifier.height(32.dp))
+                                    val db = FirebaseFirestore.getInstance()
+                                    val userDoc = db.collection("Users").document(userId).get().await()
+                                    val userName = userDoc.getString("name") ?: "anonymous"
 
-// Submit Button
-                    Button(
-                        onClick = {
-                            if (title.text.isNotBlank() && description.text.isNotBlank()) {
-                                isLoading = true
-                                scope.launch {
-                                    isLoading = true
-                                    try {
-                                        val currentUser = FirebaseAuth.getInstance().currentUser
-                                        val userId = currentUser?.uid ?: throw Exception("User not logged in")
-
-                                        // Fetch the user's name from Firestore
-                                        val db = FirebaseFirestore.getInstance()
-                                        val userDoc = db.collection("Users").document(userId).get().await()
-                                        val userName = userDoc.getString("name") ?: "anonymous"
-
-                                        // Prepare incident data
-                                        val incidentData = hashMapOf(
-                                            "title" to title.text,
-                                            "description" to description.text,
-                                            "picture" to (selectedImageUri ?: ""),
-                                            "postedBy" to userName,
-                                            "status" to "pending",
-                                            "timestamp" to Timestamp.now()
-                                        )
-
-                                        // Add incident to Firestore
-                                        db.collection("Incident").add(incidentData).await()
-
-                                        // Reset UI states
-                                        isLoading = false
-                                        onSubmit(title.text, description.text, selectedImageUri)
-
-                                    } catch (e: Exception) {
-                                        isLoading = false
-                                        println("Submit failed: ${e.message}")
-                                        e.printStackTrace()
+                                    // Init Supabase client
+                                    val supabase = createSupabaseClient(
+                                        supabaseUrl = "https://tewchlxrvfuzusdnhynk.supabase.co", // 🔑 replace
+                                        supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRld2NobHhydmZ1enVzZG5oeW5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDIwMDgsImV4cCI6MjA3MzgxODAwOH0.35QdJV3WnOFzKmVPX_R4iOM0VXAbRnXJyuIZOXNamRU"              // 🔑 replace
+                                    ) {
+                                        install(Storage)
                                     }
-                                }
 
+                                    var imageUrl = ""
+                                    if (selectedImageUri != null) {
+                                        val uri = Uri.parse(selectedImageUri)
+                                        val inputStream = context.contentResolver.openInputStream(uri)
+                                        val bytes = inputStream?.readBytes()
+                                        inputStream?.close()
+
+                                        if (bytes != null) {
+                                            val fileName = "incidents/${UUID.randomUUID()}.jpg"
+
+                                            // Upload to Supabase
+                                            supabase.storage.from("incident-images").upload(fileName, bytes)
+
+                                            // Get public URL
+                                            imageUrl = supabase.storage.from("incident-images").publicUrl(fileName)
+                                        }
+                                    }
+
+                                    // Incident data
+                                    val incidentData = hashMapOf(
+                                        "title" to title.text,
+                                        "description" to description.text,
+                                        "picture" to imageUrl, // ✅ Supabase URL
+                                        "postedBy" to userName,
+                                        "status" to "pending",
+                                        "timestamp" to Timestamp.now()
+                                    )
+
+                                    db.collection("Incident").add(incidentData).await()
+
+                                    isLoading = false
+                                    onSubmit(title.text, description.text, imageUrl)
+                                } catch (e: Exception) {
+                                    isLoading = false
+                                    println("Submit failed: ${e.message}")
+                                    e.printStackTrace()
+                                }
                             }
-                        },
-                        enabled = title.text.isNotBlank() && description.text.isNotBlank() && !isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF667eea),
-                            disabledContainerColor = Color(0xFFE2E8F0)
-                        )
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                color = Color.White,
-                                modifier = Modifier.size(20.dp),
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text(
-                                "Submit Report",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
                         }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    } else {
+                        Text("Submit Report")
                     }
                 }
             }
         }
     }
 }
+
 
 @Composable
 fun ModernIncidentCard(
@@ -607,13 +634,14 @@ fun ModernIncidentCard(
                 AsyncImage(
                     model = incident.picture,
                     contentDescription = "Incident Image",
-                    contentScale = ContentScale.Crop,
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(200.dp)
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFFF8FAFC))
                         .clickable { onImageClick(incident.picture) }
+
                 )
             }
 
@@ -778,7 +806,7 @@ fun ModernEmptyStateCard() {
             Spacer(modifier = Modifier.height(32.dp))
 
             Text(
-                text = "All Clear! 🛡️",
+                text = "All Clear! 🛡",
                 style = MaterialTheme.typography.headlineMedium.copy(
                     fontWeight = FontWeight.Bold,
                     fontSize = 28.sp

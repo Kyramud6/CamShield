@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,8 +24,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -32,15 +35,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.Warning
 
 @Composable
 fun SOSFullScreenOverlay(
@@ -290,6 +284,7 @@ private fun SOSFullScreenContent(
         }
     }
 }
+
 @Composable
 fun ModernSOSButton(
     isPressed: Boolean,
@@ -297,17 +292,54 @@ fun ModernSOSButton(
     scale: Float,
     modifier: Modifier = Modifier
 ) {
+    var isHolding by remember { mutableStateOf(false) }
+    var holdProgress by remember { mutableStateOf(0f) }
+    val holdDuration = 1000L // 1 second in milliseconds
+
+    LaunchedEffect(isHolding) {
+        if (isHolding) {
+            val startTime = System.currentTimeMillis()
+            while (isHolding) {
+                val currentTime = System.currentTimeMillis()
+                val elapsed = currentTime - startTime
+                holdProgress = (elapsed.toFloat() / holdDuration).coerceAtMost(1f)
+
+                if (holdProgress >= 1f) {
+                    onSOSClick()
+                    isHolding = false
+                    holdProgress = 0f
+                    break
+                }
+                delay(16) // ~60 FPS updates
+            }
+            // Reset progress if released early
+            if (!isHolding) {
+                holdProgress = 0f
+            }
+        } else {
+            holdProgress = 0f
+        }
+    }
+
     Card(
-        onClick = onSOSClick,
         modifier = modifier
             .size(width = 70.dp, height = 70.dp)
-            .scale(scale),
+            .scale(scale)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isHolding = true
+                        tryAwaitRelease()
+                        isHolding = false
+                    }
+                )
+            },
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isPressed) 20.dp else 12.dp
+            defaultElevation = if (isHolding || isPressed) 20.dp else 12.dp
         ),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFF0700)
+            containerColor = if (isHolding) Color(0xFFFF4444) else Color(0xFFFF0700)
         )
     ) {
         Box(
@@ -316,26 +348,49 @@ fun ModernSOSButton(
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(Color(0xFFFF0700), Color(0xFFFF0700))
+                        colors = if (isHolding) {
+                            listOf(Color(0xFFFF4444), Color(0xFFFF0700))
+                        } else {
+                            listOf(Color(0xFFFF0700), Color(0xFFFF0700))
+                        }
                     )
                 )
         ) {
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+            // Progress indicator background
+            if (isHolding) {
+                CircularProgressIndicator(
+                    progress = holdProgress,
+                    modifier = Modifier
+                        .size(60.dp),
+                    color = Color.White,
+                    strokeWidth = 3.dp,
+                    trackColor = Color.White.copy(alpha = 0.3f)
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = "SOS",
                     color = Color.White,
-                    fontSize = 24.sp,
+                    fontSize = if (isHolding) 20.sp else 24.sp,
                     fontWeight = FontWeight.Bold
                 )
+
+                if (isHolding) {
+                    Text(
+                        text = "Hold...",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
             }
         }
     }
 }
-
-
 
 // Usage Example in your Activity/Fragment
 @Composable
@@ -348,7 +403,7 @@ fun SOSScreen() {
     Box(modifier = Modifier.fillMaxSize()) {
         // Your main content here
 
-        // SOS Button
+        // SOS Button with Press-and-Hold functionality
         ModernSOSButton(
             isPressed = isButtonPressed,
             onSOSClick = {

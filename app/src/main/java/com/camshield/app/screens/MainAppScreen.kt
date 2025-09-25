@@ -43,7 +43,7 @@ fun MainApp() {
 
         ModalNavigationDrawer(
             drawerState = drawerState,
-            gesturesEnabled = true,
+            gesturesEnabled = false,
             drawerContent = {
                 SideDrawerContent(onCloseDrawer = { scope.launch { drawerState.close() } })
             },
