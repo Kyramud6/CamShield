@@ -418,6 +418,7 @@
       <div class="form-group">
         <label class="form-label">Location</label>
         <input type="text" class="form-input" id="modalLocation" readonly>
+        <div id="modalMap" style="width: 100%; height: 250px; border-radius: 15px; border: 2px solid #333;"></div>
       </div>
 
       <div class="form-group">
@@ -469,9 +470,12 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
       modalName.value = sosData.name || sosData.Name || 'N/A';
       modalType.value = sosData.type || sosData.Type || 'N/A';
       modalStatus.value = sosData.status || sosData.Status || 'N/A';
+
       
       // Format location
       let loc = "N/A";
+      let lat , lon; 
+
       const location = sosData.location || sosData.Location;
       if (location) {
         let lat, lon;
@@ -482,37 +486,63 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
           lat = parseFloat(location.latitude);
           lon = parseFloat(location.longitude);
         }
+
+        if ((lat == null || lon == null )&& sosData.latitude !=null && sosData.longitude != null){
+          lat = parseFloat(sosData.latitude);
+          lon = parseFloat(sosData.longitude);
+        }
+
+        if (!isNaN(lat) && !isNaN(lon)) {
+    const map = new google.maps.Map(document.getElementById("modalMap"), {
+      center: { lat: lat, lng: lon },
+      zoom: 16,
+    });
+    new google.maps.Marker({
+      position: { lat: lat, lng: lon },
+      map: map,
+      title: "SOS Location",
+      icon : {
+        url : "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbkyhsZQ9itQiQGDQTR7V3fLB4kLth8i2nzw&s",
+        scaledSize : new google.maps.Size (40,40)}
+      });
+      
         if (!isNaN(lat) && !isNaN(lon)) {
           loc = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
         }
       }
+  } else {
+    document.getElementById("modalMap").innerHTML = "<p style='color:red'>No valid location</p>";
+  }
+
+
+
       modalLocation.value = loc;
 
-      // Format timestamp
-      let timeStr = "N/A";
-      const ts = sosData.timestamp || sosData.Time;
-      let timestampDate;
-      if (ts && typeof ts.toDate === 'function') {
-        timestampDate = ts.toDate();
-      } else if (typeof ts === 'string') {
-        timestampDate = new Date(ts);
-      }
-      if (timestampDate && !isNaN(timestampDate.getTime())) {
-        timeStr = timestampDate.toLocaleString();
-      }
-      modalTime.value = timeStr;
+  // Format timestamp
+  let timeStr = "N/A";
+  const ts = sosData.timestamp || sosData.Time;
+  let timestampDate;
+  if (ts && typeof ts.toDate === 'function') {
+    timestampDate = ts.toDate();
+  } else if (typeof ts === 'string') {
+    timestampDate = new Date(ts);
+  }
+  if (timestampDate && !isNaN(timestampDate.getTime())) {
+    timeStr = timestampDate.toLocaleString();
+  }
+  modalTime.value = timeStr;
 
       // Handle audio
-      const audioUrl = sosData.audioUrl1 || sosData.audioUrl || '';
-      if (audioUrl && audioUrl.startsWith('http')) {
-        modalAudio.src = audioUrl;
-        audioGroup.style.display = 'block';
-      } else {
-        audioGroup.style.display = 'none';
-      }
+  const audioUrl = sosData.audioUrl1 || sosData.audioUrl || '';
+  if (audioUrl && audioUrl.startsWith('http')) {
+    modalAudio.src = audioUrl;
+    audioGroup.style.display = 'block';
+  } else {
+    audioGroup.style.display = 'none';
+  }
 
-      modalOverlay.classList.add('active');
-    }
+  modalOverlay.classList.add('active');
+}
 
     function closeModal() {
       modalOverlay.classList.remove('active');
@@ -538,11 +568,8 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
     function getTypeIcon(type) {
       if (!type) return '🆘';
       const typeLower = type.toLowerCase();
-      if (typeLower.includes('medical')) return '🏥';
-      if (typeLower.includes('fire')) return '🔥';
-      if (typeLower.includes('security')) return '🔒';
-      if (typeLower.includes('accident')) return '🚨';
-      if (typeLower.includes('walkwithme')) return '🚶';
+      if (typeLower.includes('fire_emergency')) return '🚨';
+      if (typeLower.includes('walk_with_me')) return '👣';
       return '🆘';
     }
 
@@ -565,13 +592,15 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
         sosList.innerHTML = "";
         const sosData = {};
 
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          const docId = doc.id;
-          sosData[docId] = data;
+  querySnapshot.forEach((sosDoc) => {
+  const data = sosDoc.data();
+  const docId = sosDoc.id;
+
+    sosData[docId] = data; 
 
           // Format location
           let loc = "Unknown Location";
+          let lat , lon; 
           const location = data.location || data.Location;
           if (location) {
             let lat, lon;
@@ -582,6 +611,12 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
               lat = parseFloat(location.latitude);
               lon = parseFloat(location.longitude);
             }
+
+         if ((lat == null || lon == null) && data.latitude != null && data.longitude != null) {
+  lat = parseFloat(data.latitude);
+  lon = parseFloat(data.longitude);
+}
+
             if (!isNaN(lat) && !isNaN(lon)) {
               loc = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
             }
@@ -629,23 +664,6 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
 const sosCard = document.createElement("div");
 sosCard.className = `sos-card ${statusClass} ${typeClass}`;
 
-
-          window.respondSOS = async function(docId) {
-  if (!docId) return;
-  try {
-    const sosRef = doc(db, "SOS", docId);
-    await updateDoc(sosRef, {
-      status: "Responded"
-    });
-    alert("✅ Status updated to Responded");
-    loadSOS(); // Refresh the list to show updated status
-  } catch (error) {
-    console.error("Error updating status:", error);
-    alert("❌ Failed to update status");
-  }
-};
-
-
           sosCard.innerHTML = `
             ${statusClass === 'urgent' ? '<div class="priority-indicator priority-urgent"></div>' : ''}
             <div class="sos-avatar">
@@ -680,6 +698,22 @@ sosCard.className = `sos-card ${statusClass} ${typeClass}`;
 
           sosList.appendChild(sosCard);
         });
+
+
+                window.respondSOS = async function(docId) {
+  if (!docId) return;
+  try {
+    const sosRef = doc(db, "SOS", docId);
+    await updateDoc(sosRef, {
+      status: "Responded"
+    });
+    alert("✅ Status updated to Responded");
+    loadSOS(); // Refresh the list to show updated status
+  } catch (error) {
+    console.error("Error updating status:", error);
+    alert("❌ Failed to update status");
+  }
+};
 
         // Store SOS data for modal access
         window.sosData = sosData;
@@ -716,6 +750,9 @@ sosCard.className = `sos-card ${statusClass} ${typeClass}`;
 
     // Auto-refresh every 30 seconds
     setInterval(loadSOS, 30000);
+  
   </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA3_P8EIN0I1IJv0j9cP7WZdhdOZyXHgGQ"></script>
+
 </body>
 </html>

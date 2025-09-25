@@ -137,66 +137,58 @@
       });
     }
 
-    // Watch SOS alerts (GeoPoint, array, or object {lat,lng})
+    function extractLatLng(data) {
+  if (data.location && typeof data.location.latitude === "number" && typeof data.location.longitude === "number") {
+    return { lat: data.location.latitude, lng: data.location.longitude };
+  } else if (typeof data.latitude === "number" && typeof data.longitude === "number") {
+    return { lat: data.latitude, lng: data.longitude };
+  }
+  return null; // no valid location
+}
+
     function watchSOS() {
-      const ref = query(collection(db, "SOS"), where("status", "==", "Pending"));
+  const ref = query(collection(db, "SOS"), where("status", "==", "Pending"));
 
-      onSnapshot(ref, (snapshot) => {
-        markers.sos.forEach(m => m.setMap(null));
-        markers.sos = [];
+  onSnapshot(ref, (snapshot) => {
+    markers.sos.forEach(m => m.setMap(null));
+    markers.sos = [];
 
-        snapshot.forEach(docSnap => {
-          const data = docSnap.data();
-          let lat, lng;
+    snapshot.forEach(docSnap => {
+      const data = docSnap.data();
+      const coords = extractLatLng(data);
 
-          // Handle GeoPoint
-          if (data.location && typeof data.location.latitude === "number" && typeof data.location.longitude === "number") {
-            lat = data.location.latitude;
-            lng = data.location.longitude;
-          }
-          // Handle Array [lat, lng]
-          else if (Array.isArray(data.location) && data.location.length >= 2) {
-            lat = parseFloat(data.location[0]);
-            lng = parseFloat(data.location[1]);
-          }
-          // Handle object {lat, lng}
-          else if (data.location && typeof data.location.lat === "number" && typeof data.location.lng === "number") {
-            lat = data.location.lat;
-            lng = data.location.lng;
-          }
+      if (!coords) {
+        console.warn("SOS has no valid location:", docSnap.id);
+        return;
+      }
 
-          if (lat != null && lng != null) {
-            const marker = new google.maps.Marker({
-              position: { lat, lng },
-              map: map,
-              title: "SOS Alert",
-              icon: {
-                url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbkyhsZQ9itQiQGDQTR7V3fLB4kLth8i2nzw&s",
-                scaledSize: new google.maps.Size(30, 30),
-              }
-            });
-
-            marker.addListener("click", () => {
-              const content = `
-                <div style="min-width:180px">
-                  <b>🚨 SOS Alert 🚨</b><br>
-                  <b>Status:</b> ${data.status || "Unknown"}<br>
-                  <b>Type:</b> ${data.type || "N/A"}<br>
-                  <b>Lat:</b> ${lat}<br>
-                  <b>Lng:</b> ${lng}
-                </div>
-              `;
-              infoWindow.setContent(content);
-              infoWindow.open(map, marker);
-            });
-
-            markers.sos.push(marker);
-          } else {
-            console.warn("SOS doc has no valid location:", docSnap.id, data);
-          }
-        });
+      const marker = new google.maps.Marker({
+        position: coords,
+        map,
+        title: "SOS Alert",
+        icon: {
+          url: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbkyhsZQ9itQiQGDQTR7V3fLB4kLth8i2nzw&s",
+          scaledSize: new google.maps.Size(30, 30),
+        }
       });
-    }
+
+      marker.addListener("click", () => {
+        infoWindow.setContent(`
+          <div>
+            <b>🚨 SOS Alert 🚨</b><br>
+            <b>Status:</b> ${data.status || "Unknown"}<br>
+            <b>Type:</b> ${data.type || "N/A"}<br>
+            <b>Lat:</b> ${coords.lat}<br>
+            <b>Lng:</b> ${coords.lng}
+          </div>
+        `);
+        infoWindow.open(map, marker);
+      });
+
+      markers.sos.push(marker);
+    });
+  });
+}
 
 function watchWalkWithMe() {
   const ref = query(
@@ -211,34 +203,18 @@ function watchWalkWithMe() {
       const id = change.doc.id;
 
       if (change.type === "added") {
-        let lat, lng;
+        const coords = extractLatLng(data);
+        if (!coords) return;
 
-        // Support multiple location formats
-        if (data.location?.latitude && data.location?.longitude) {
-          lat = data.location.latitude;
-          lng = data.location.longitude;
-        } else if (data.location?.lat && data.location?.lng) {
-          lat = data.location.lat;
-          lng = data.location.lng;
-        } else if (Array.isArray(data.location)) {
-          lat = parseFloat(data.location[0]);
-          lng = parseFloat(data.location[1]);
-        }
-
- if (lat != null && lng != null) {
-  const marker = new google.maps.Marker({
-    position: { lat, lng },
-    map,
-    icon: {
-      url: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png", // 👣 blue pin
-      scaledSize: new google.maps.Size(40, 40),
-    },
-    title: `Walk With Me: ${data.name || "Unknown"}`
-  });
-
-  markers[id] = marker;
-}
-
+        markers[id] = new google.maps.Marker({
+          position: coords,
+          map,
+          icon: {
+            url: "https://static.vecteezy.com/system/resources/previews/055/594/116/non_2x/walk-silhouette-icon-illustration-vector.jpg",
+            scaledSize: new google.maps.Size(40, 40),
+          },
+          title: `Walk With Me: ${data.name || "Unknown"}`
+        });
       }
 
       if (change.type === "removed" && markers[id]) {
