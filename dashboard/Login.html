@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>Admin Login - CamShield</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Prevent favicon error -->
   <link rel="icon" href="data:,">
   <style>
     body {
@@ -16,14 +15,12 @@
       height: 100vh;
       margin: 0;
     }
-
-       .header-logo-img {
+    .header-logo-img {
       width: 300px;
       height: 75px;
       object-fit: contain;
-      margin-right: 10px;
+      margin-bottom: 10px;
     }
-
     .login-container {
       background: #fff;
       padding: 25px;
@@ -74,11 +71,10 @@
   </div>
 
   <script type="module">
-    // Firebase imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-    // Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
       authDomain: "camshield-50aec.firebaseapp.com",
@@ -89,46 +85,62 @@
       measurementId: "G-W4N2BLCEL3"
     };
 
-    // Init Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
 
     const emailInput = document.getElementById("email");
     const passwordInput = document.getElementById("password");
     const loginBtn = document.getElementById("loginBtn");
     const errorMessage = document.getElementById("errorMessage");
 
-    // Handle login button
+    // Optional: redirect if already logged in
+    onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists() && userDoc.data().role === "admin") {
+            window.location.href = "Dashboard.html";
+          } else {
+            await signOut(auth);
+          }
+        } catch (error) {
+          console.error("Auth state check error:", error);
+        }
+      }
+    });
+
     loginBtn.addEventListener("click", async () => {
       const email = emailInput.value.trim();
       const password = passwordInput.value.trim();
+      errorMessage.textContent = "";
+
+      if (!email || !password) {
+        errorMessage.textContent = "Please enter both email and password.";
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        errorMessage.textContent = "Please enter a valid email.";
+        return;
+      }
 
       try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        // Restrict to admin only
-        if (user.email === "admin@admin.newinti.edu.my") {
+        // Check admin role in Firestore
+        const userDoc = await getDoc(doc(db, "Users", user.uid));
+        if (userDoc.exists() && userDoc.data().role === "admin") {
           window.location.href = "Dashboard.html";
         } else {
-          await signOut(auth); // Sign out if not admin
+          await signOut(auth);
           errorMessage.textContent = "Access denied: Not an admin account.";
         }
       } catch (error) {
+        console.error("Login error:", error);
         errorMessage.textContent = error.message;
-      }
-    });
-
-    // Check auth state and handle redirect
-    onAuthStateChanged(auth, (user) => {
-      if (user && user.email === "admin@admin.newinti.edu.my") {
-        window.location.href = "Dashboard.html";
-      } else if (user) {
-        signOut(auth).then(() => {
-          // Ensure non-admin users are signed out silently
-        }).catch((error) => {
-          console.error("Error signing out:", error);
-        });
       }
     });
   </script>
