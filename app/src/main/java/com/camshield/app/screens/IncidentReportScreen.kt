@@ -87,6 +87,8 @@ import io.github.jan.supabase.storage.storage
 import kotlinx.coroutines.launch
 import java.util.*
 import com.google.firebase.auth.FirebaseAuth
+import compose.icons.FeatherIcons
+import compose.icons.feathericons.AlertCircle
 import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -213,7 +215,7 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
         db.collection("Incident")
-            .whereEqualTo("status", "pending")
+            .whereEqualTo("status", "Open")
             .addSnapshotListener { snapshot, e ->
                 if (e != null) {
                     println("Error fetching incidents: $e")
@@ -289,7 +291,7 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Phone,
+                            imageVector = FeatherIcons.AlertCircle,
                             contentDescription = null,
                             modifier = Modifier.size(28.dp),
                             tint = Color.White
@@ -304,7 +306,7 @@ fun IncidentReportScreen(onCloseDrawer: () -> Unit = {}) {
                             color = Color.White
                         )
                         Text(
-                            text = "Your safety network at fingertips",
+                            text = "See, Say, Safe",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Color.White.copy(alpha = 0.9f)
                         )
@@ -395,6 +397,24 @@ fun AddIncidentFormOverlay(
     var selectedImageUri by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
 
+    // Animation states
+    var isVisible by remember { mutableStateOf(false) }
+    val animatedScale by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0.7f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        )
+    )
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isVisible) 1f else 0f,
+        animationSpec = tween(300)
+    )
+
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
     // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -402,155 +422,332 @@ fun AddIncidentFormOverlay(
         uri?.let { selectedImageUri = it.toString() }
     }
 
+    // Calculate header height to position overlay correctly
+    val headerContentHeight = 80.dp
+    val headerVerticalPadding = 16.dp
+    val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    val totalHeaderHeight = headerContentHeight + headerVerticalPadding * 2 + statusBarPadding
+
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0x80000000))
-            .clickable(onClick = onDismiss)
+            .background(Color.Black.copy(alpha = 0.6f * animatedAlpha))
+            .statusBarsPadding() // Add status bar padding to the entire overlay
+            .clickable { onDismiss() }
     ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
-                .align(Alignment.Center),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(8.dp)
+                .padding(
+                    start = 20.dp,
+                    end = 20.dp,
+                    top = totalHeaderHeight + 20.dp, // Position below header with some margin
+                    bottom = 20.dp
+                )
+                .scale(animatedScale)
+                .alpha(animatedAlpha)
+                .clickable(enabled = false) { /* Prevent closing when clicking card */ },
+            shape = RoundedCornerShape(28.dp),
+            elevation = CardDefaults.cardElevation(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.White
+            )
         ) {
             Column(
                 modifier = Modifier
-                    .padding(16.dp)
+                    .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                Text(
-                    "Report Incident",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-
-                // Title input
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Description input
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 4
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Image picker
-                Button(
-                    onClick = { imagePickerLauncher.launch("image/*") },
-                    modifier = Modifier.fillMaxWidth()
+                // Form Content
+                Column(
+                    modifier = Modifier.padding(30.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Text("Pick Image")
-                }
+                    // Form Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Report Incident",
+                            style = MaterialTheme.typography.headlineSmall.copy(
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp
+                            ),
+                            color = Color(0xFF1E293B)
+                        )
 
-                selectedImageUri?.let {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    AsyncImage(
-                        model = it,
-                        contentDescription = "Selected Image",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.Crop
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    Color(0xFFF1F5F9),
+                                    CircleShape
+                                )
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = Color(0xFF64748B),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    // Title Input
+                    OutlinedTextField(
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
                     )
-                }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    // Description input
+                    OutlinedTextField(
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth(),
+                        maxLines = 4,
+                        shape = RoundedCornerShape(12.dp)
+                    )
 
-                // Submit button
-                Button(
-                    onClick = {
-                        if (title.text.isNotBlank() && description.text.isNotBlank()) {
-                            isLoading = true
-                            scope.launch {
-                                try {
-                                    val currentUser = FirebaseAuth.getInstance().currentUser
-                                    val userId = currentUser?.uid ?: throw Exception("User not logged in")
-
-                                    val db = FirebaseFirestore.getInstance()
-                                    val userDoc = db.collection("Users").document(userId).get().await()
-                                    val userName = userDoc.getString("name") ?: "anonymous"
-
-                                    // Init Supabase client
-                                    val supabase = createSupabaseClient(
-                                        supabaseUrl = "https://tewchlxrvfuzusdnhynk.supabase.co", // 🔑 replace
-                                        supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRld2NobHhydmZ1enVzZG5oeW5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDIwMDgsImV4cCI6MjA3MzgxODAwOH0.35QdJV3WnOFzKmVPX_R4iOM0VXAbRnXJyuIZOXNamRU"              // 🔑 replace
+                    // Image Section - Removed "Evidence Photo" text
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Image picker button or selected image
+                        if (selectedImageUri == null) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(140.dp) // Reduced height
+                                    .clickable { imagePickerLauncher.launch("image/*") },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFF8FAFC)
+                                ),
+                                border = BorderStroke(
+                                    2.dp,
+                                    Color(0xFFE2E8F0),
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(20.dp), // Reduced padding
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(50.dp) // Reduced size
+                                            .background(
+                                                Color(0xFF667eea).copy(alpha = 0.1f),
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        install(Storage)
+                                        Icon(
+                                            imageVector = Icons.Default.Add,
+                                            contentDescription = null,
+                                            tint = Color(0xFF667eea),
+                                            modifier = Modifier.size(24.dp) // Reduced size
+                                        )
                                     }
-
-                                    var imageUrl = ""
-                                    if (selectedImageUri != null) {
-                                        val uri = Uri.parse(selectedImageUri)
-                                        val inputStream = context.contentResolver.openInputStream(uri)
-                                        val bytes = inputStream?.readBytes()
-                                        inputStream?.close()
-
-                                        if (bytes != null) {
-                                            val fileName = "incidents/${UUID.randomUUID()}.jpg"
-
-                                            // Upload to Supabase
-                                            supabase.storage.from("incident-images").upload(fileName, bytes)
-
-                                            // Get public URL
-                                            imageUrl = supabase.storage.from("incident-images").publicUrl(fileName)
-                                        }
-                                    }
-
-                                    // Incident data
-                                    val incidentData = hashMapOf(
-                                        "title" to title.text,
-                                        "description" to description.text,
-                                        "picture" to imageUrl, // ✅ Supabase URL
-                                        "postedBy" to userName,
-                                        "status" to "pending",
-                                        "timestamp" to Timestamp.now()
+                                    Spacer(modifier = Modifier.height(8.dp)) // Reduced spacing
+                                    Text(
+                                        text = "Add photo (optional)",
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = Color(0xFF667eea)
+                                    )
+                                    Text(
+                                        text = "JPG, PNG up to 10MB",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
+                            }
+                        } else {
+                            // Selected image preview
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                elevation = CardDefaults.cardElevation(4.dp)
+                            ) {
+                                Box {
+                                    AsyncImage(
+                                        model = selectedImageUri,
+                                        contentDescription = "Selected Image",
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(180.dp), // Reduced height
+                                        contentScale = ContentScale.Crop
                                     )
 
-                                    db.collection("Incident").add(incidentData).await()
+                                    // Remove image button
+                                    IconButton(
+                                        onClick = { selectedImageUri = null },
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(12.dp)
+                                            .size(36.dp)
+                                            .background(
+                                                Color.Black.copy(alpha = 0.6f),
+                                                CircleShape
+                                            )
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Remove image",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
 
-                                    isLoading = false
-                                    onSubmit(title.text, description.text, imageUrl)
-                                } catch (e: Exception) {
-                                    isLoading = false
-                                    println("Submit failed: ${e.message}")
-                                    e.printStackTrace()
+                                    // Change image button
+                                    Button(
+                                        onClick = { imagePickerLauncher.launch("image/*") },
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(12.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color.Black.copy(alpha = 0.6f)
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Image,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            "Change",
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    }
                                 }
                             }
                         }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    } else {
-                        Text("Submit Report")
+                    }
+
+                    // Submit and Cancel buttons in a row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Cancel button
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = Color(0xFF64748B)
+                            ),
+                            border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        ) {
+                            Text(
+                                "Cancel",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+
+                        // Submit button
+                        Button(
+                            onClick = {
+                                if (title.text.isNotBlank() && description.text.isNotBlank()) {
+                                    isLoading = true
+                                    scope.launch {
+                                        try {
+                                            val currentUser = FirebaseAuth.getInstance().currentUser
+                                            val userId = currentUser?.uid ?: throw Exception("User not logged in")
+
+                                            val db = FirebaseFirestore.getInstance()
+                                            val userDoc = db.collection("Users").document(userId).get().await()
+                                            val userName = userDoc.getString("name") ?: "anonymous"
+
+                                            // Init Supabase client
+                                            val supabase = createSupabaseClient(
+                                                supabaseUrl = "https://tewchlxrvfuzusdnhynk.supabase.co",
+                                                supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRld2NobHhydmZ1enVzZG5oeW5rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTgyNDIwMDgsImV4cCI6MjA3MzgxODAwOH0.35QdJV3WnOFzKmVPX_R4iOM0VXAbRnXJyuIZOXNamRU"
+                                            ) {
+                                                install(Storage)
+                                            }
+
+                                            var imageUrl = ""
+                                            if (selectedImageUri != null) {
+                                                val uri = Uri.parse(selectedImageUri)
+                                                val inputStream = context.contentResolver.openInputStream(uri)
+                                                val bytes = inputStream?.readBytes()
+                                                inputStream?.close()
+
+                                                if (bytes != null) {
+                                                    val fileName = "incidents/${UUID.randomUUID()}.jpg"
+                                                    supabase.storage.from("incident-images").upload(fileName, bytes)
+                                                    imageUrl = supabase.storage.from("incident-images").publicUrl(fileName)
+                                                }
+                                            }
+
+                                            val incidentData = hashMapOf(
+                                                "title" to title.text,
+                                                "description" to description.text,
+                                                "picture" to imageUrl,
+                                                "postedBy" to userName,
+                                                "status" to "pending",
+                                                "timestamp" to Timestamp.now()
+                                            )
+
+                                            db.collection("Incident").add(incidentData).await()
+
+                                            isLoading = false
+                                            onSubmit(title.text, description.text, imageUrl)
+                                        } catch (e: Exception) {
+                                            isLoading = false
+                                            println("Submit failed: ${e.message}")
+                                            e.printStackTrace()
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            enabled = !isLoading && title.text.isNotBlank() && description.text.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF667eea),
+                                disabledContainerColor = Color(0xFFE2E8F0)
+                            )
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    color = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    "Submit",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
-
 
 @Composable
 fun ModernIncidentCard(
@@ -818,7 +1015,7 @@ fun ModernEmptyStateCard() {
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = "No pending security incidents",
+                text = "No reported security incidents",
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 18.sp

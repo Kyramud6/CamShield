@@ -50,7 +50,7 @@ import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntOffset
 import com.camshield.app.App
-
+import compose.icons.feathericons.Phone
 
 // Contact data model
 data class Contact(
@@ -73,6 +73,10 @@ fun EmergencyContactScreen() {
     var personalContacts by remember { mutableStateOf<List<Contact>>(emptyList()) }
     var showAllUniversityContacts by remember { mutableStateOf(false) }
     var showAllPersonalContacts by remember { mutableStateOf(false) }
+
+    // Add state for delete confirmation
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var contactToDelete by remember { mutableStateOf<Contact?>(null) }
 
     // --- Load university contacts ---
     LaunchedEffect(Unit) {
@@ -127,13 +131,12 @@ fun EmergencyContactScreen() {
 
     Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
 
-// Suppose your header height is:
+        // Suppose your header height is:
         val headerContentHeight = 80.dp // your main header box height
         val headerVerticalPadding = 16.dp
         val statusBarPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
 
         val totalHeaderHeight = headerContentHeight + headerVerticalPadding * 2 + statusBarPadding
-
 
         // Full-width header with gradient blending into background
         Box(
@@ -146,7 +149,7 @@ fun EmergencyContactScreen() {
                             0.7f to MaterialTheme.colorScheme.primary, // stays primary longer
                             1.0f to MaterialTheme.colorScheme.background
                         )
-                        )
+                    )
                 )
                 .statusBarsPadding()
                 .padding(horizontal = 24.dp, vertical = 16.dp)
@@ -161,8 +164,8 @@ fun EmergencyContactScreen() {
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Phone,
-                        contentDescription = null,
+                        imageVector = FeatherIcons.Phone,
+                        contentDescription = "Phone",
                         modifier = Modifier.size(28.dp),
                         tint = Color.White
                     )
@@ -183,7 +186,6 @@ fun EmergencyContactScreen() {
                 }
             }
         }
-
 
         LazyColumn(
             modifier = Modifier
@@ -344,7 +346,6 @@ fun EmergencyContactScreen() {
                                     contentDescription = "Add",
                                     modifier = Modifier.size(24.dp)
                                 )
-
                             }
                         }
 
@@ -356,13 +357,9 @@ fun EmergencyContactScreen() {
                                 EnhancedContactCard(
                                     contact = contact,
                                     onDeleteClick = {
-                                        if (userId != null) {
-                                            db.collection("Personal_Contacts")
-                                                .document(userId)
-                                                .collection("contacts")
-                                                .document(contact.id)
-                                                .delete()
-                                        }
+                                        // Show confirmation dialog instead of deleting directly
+                                        contactToDelete = contact
+                                        showDeleteConfirmDialog = true
                                     }
                                 )
                             }
@@ -403,6 +400,74 @@ fun EmergencyContactScreen() {
             }
         )
     }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirmDialog && contactToDelete != null) {
+        DeleteConfirmationDialog(
+            contactName = contactToDelete!!.name,
+            onConfirm = {
+                if (userId != null) {
+                    db.collection("Personal_Contacts")
+                        .document(userId)
+                        .collection("contacts")
+                        .document(contactToDelete!!.id)
+                        .delete()
+                }
+                showDeleteConfirmDialog = false
+                contactToDelete = null
+            },
+            onDismiss = {
+                showDeleteConfirmDialog = false
+                contactToDelete = null
+            }
+        )
+    }
+}
+
+// New Delete Confirmation Dialog Component
+@Composable
+fun DeleteConfirmationDialog(
+    contactName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                "Delete Contact",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        },
+        text = {
+            Text(
+                "Are you sure you want to delete \"$contactName\"?",
+                style = MaterialTheme.typography.bodyMedium
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Delete")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Cancel")
+            }
+        },
+        shape = RoundedCornerShape(20.dp)
+    )
 }
 
 @Composable
@@ -575,7 +640,7 @@ fun EnhancedContactCard(
                     }
                 }
 
-                // ✅ Call button now directly opens ACTION_DIAL
+                // Call button
                 FilledIconButton(
                     onClick = {
                         val intent = Intent(Intent.ACTION_DIAL).apply {
@@ -595,7 +660,6 @@ fun EnhancedContactCard(
         }
     }
 }
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -839,7 +903,6 @@ fun EnhancedAddContactDialog(onDismiss: () -> Unit, onContactAdded: (Contact) ->
                         Text("Cancel")
                     }
                 }
-
             }
         }
     }

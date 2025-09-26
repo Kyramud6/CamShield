@@ -31,12 +31,13 @@ import com.camshield.app.R
 import compose.icons.FontAwesomeIcons
 import compose.icons.fontawesomeicons.Solid
 import compose.icons.fontawesomeicons.solid.Walking
-import compose.icons.fontawesomeicons.solid.MapMarkerAlt
 import compose.icons.fontawesomeicons.solid.Lightbulb
 import android.Manifest
 import android.annotation.SuppressLint
 import android.widget.Toast
 import android.util.Log
+import android.content.Intent
+import android.app.Activity
 
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -60,7 +61,8 @@ import kotlinx.coroutines.tasks.await
 @OptIn(com.google.accompanist.permissions.ExperimentalPermissionsApi::class)
 @Composable
 fun SideDrawerContent(
-    onCloseDrawer: () -> Unit
+    onCloseDrawer: () -> Unit,
+    onNavigateToLogin: () -> Unit
 ) {
     var showSafetyTips by remember { mutableStateOf(false) }
 
@@ -136,7 +138,6 @@ fun SideDrawerContent(
             // Menu Items
             val menuItems = listOf(
                 DrawerMenuItem("Walk With Me", FontAwesomeIcons.Solid.Walking, Color(0xFF10B981)),
-                DrawerMenuItem("Safe Locations", FontAwesomeIcons.Solid.MapMarkerAlt, Color(0xFF3B82F6)),
                 DrawerMenuItem("Safety Tips", FontAwesomeIcons.Solid.Lightbulb, Color(0xFFF59E0B)),
             )
 
@@ -159,7 +160,7 @@ fun SideDrawerContent(
                                         }
 
                                         try {
-                                            Toast.makeText(ctx, "Sending walk request...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(ctx, "Creating walk request...", Toast.LENGTH_SHORT).show()
 
                                             @SuppressLint("MissingPermission")
                                             val loc = fusedClient.getCurrentLocation(
@@ -173,19 +174,28 @@ fun SideDrawerContent(
                                                 return@launch
                                             }
 
-                                            // Get current user's name
+                                            // UPDATED: Get user document (includes saved destination)
                                             val userDoc = firestore.collection("Users")
                                                 .document(currentUser.uid)
                                                 .get()
                                                 .await()
 
                                             val userName = userDoc.getString("name") ?: "User"
+                                            val savedDestination = userDoc.get("currentDestination") as? Map<String, Any>
                                             val locationString = formatLocation(loc.latitude, loc.longitude)
 
                                             Log.d("WalkWithMe", "Creating SOS request for user: $userName at $locationString")
 
-                                            // Create SOS request
-                                            val sosData = mapOf(
+                                            // Log destination info
+                                            if (savedDestination != null) {
+                                                val destName = savedDestination["name"] as? String
+                                                Log.d("WalkWithMe", "Including saved destination: $destName")
+                                            } else {
+                                                Log.d("WalkWithMe", "No saved destination found")
+                                            }
+
+                                            // UPDATED: Create SOS request with destination if available
+                                            val sosData = mutableMapOf<String, Any>(
                                                 "audioUrl" to "",
                                                 "location" to locationString,
                                                 "name" to userName,
@@ -198,24 +208,68 @@ fun SideDrawerContent(
                                                 "longitude" to loc.longitude
                                             )
 
+                                            // FIXED CODE:
+                                            savedDestination?.let { dest ->
+                                                val destLat = dest["latitude"] as? Double
+                                                val destLng = dest["longitude"] as? Double
+                                                val destName = dest["name"] as? String
+
+                                                // Only add non-null values to avoid type mismatch
+                                                if (destLat != null && destLng != null && destName != null) {
+                                                    sosData["destinationLatitude"] = destLat
+                                                    sosData["destinationLongitude"] = destLng
+                                                    sosData["destinationName"] = destName
+                                                    Log.d("WalkWithMe", "✅ Destination included in SOS: $destName")
+                                                } else {
+                                                    Log.d("WalkWithMe", "⚠️ Destination data incomplete, not including in SOS")
+                                                }
+                                            }
+
                                             val sosRef = firestore.collection("SOS").add(sosData).await()
                                             Log.d("WalkWithMe", "SOS request created: ${sosRef.id}")
 
-                                            // Send notifications to emergency contacts
-                                            val notificationsSent = sendWalkWithMeNotifications(
+                                            // UPDATED: Send enhanced notifications with destination info
+                                            val notificationsSent = sendEnhancedWalkWithMeNotifications(
                                                 firestore = firestore,
                                                 currentUserId = currentUser.uid,
                                                 requesterName = userName,
                                                 location = locationString,
+                                                destinationName = savedDestination?.get("name") as? String,
                                                 sosRequestId = sosRef.id,
                                                 context = ctx
                                             )
 
-                                            if (notificationsSent > 0) {
-                                                Toast.makeText(ctx, "Walk request sent to $notificationsSent contacts!", Toast.LENGTH_LONG).show()
-                                            } else {
-                                                Toast.makeText(ctx, "No emergency contacts found with app accounts", Toast.LENGTH_LONG).show()
+                                            // ✅ CLEAR DESTINATION AFTER SUCCESSFUL USE
+                                            if (savedDestination != null) {
+                                                try {
+                                                    firestore.collection("Users")
+                                                        .document(currentUser.uid)
+                                                        .update("currentDestination", null)
+                                                        .await()
+
+                                                    Log.d("WalkWithMe", "🧹 Destination cleared from Firebase after use")
+                                                } catch (e: Exception) {
+                                                    Log.e("WalkWithMe", "Failed to clear destination", e)
+                                                    // Don't fail the whole process if clearing fails
+                                                }
                                             }
+
+                                            val message = if (savedDestination != null) {
+                                                val destName = savedDestination["name"] as? String
+                                                if (notificationsSent > 0) {
+                                                    "Walk request sent to $notificationsSent contacts!\nDestination: $destName"
+                                                } else {
+                                                    "No emergency contacts found with app accounts"
+                                                }
+                                            } else {
+                                                if (notificationsSent > 0) {
+                                                    "Walk request sent to $notificationsSent contacts!"
+                                                } else {
+                                                    "No emergency contacts found with app accounts"
+                                                }
+                                            }
+
+                                            Toast.makeText(ctx, message, Toast.LENGTH_LONG).show()
 
                                         } catch (e: Exception) {
                                             Log.e("WalkWithMe", "Error in Walk With Me", e)
@@ -271,7 +325,7 @@ fun SideDrawerContent(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Logout section
+            // Logout section with actual logout functionality
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -279,8 +333,28 @@ fun SideDrawerContent(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        // Handle logout action here
-                        onCloseDrawer()
+                        // Handle logout action
+                        scope.launch {
+                            try {
+                                Toast.makeText(ctx, "Logging out...", Toast.LENGTH_SHORT).show()
+
+                                // Sign out from Firebase Auth
+                                auth.signOut()
+
+                                Log.d("Logout", "User signed out successfully")
+                                Toast.makeText(ctx, "Logged out successfully", Toast.LENGTH_SHORT).show()
+
+                                // Close drawer first
+                                onCloseDrawer()
+
+                                // Navigate to login screen using Navigation Compose
+                                onNavigateToLogin()
+
+                            } catch (e: Exception) {
+                                Log.e("Logout", "Error during logout", e)
+                                Toast.makeText(ctx, "Logout failed: ${e.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
                     }
                     .padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -381,19 +455,21 @@ fun formatLocation(lat: Double, lng: Double): String {
     return "${String.format("%.6f", kotlin.math.abs(lat))}°$latDir, ${String.format("%.6f", kotlin.math.abs(lng))}°$lngDir"
 }
 
-// ENHANCED DATABASE-ONLY notification function with detailed debugging
-suspend fun sendWalkWithMeNotifications(
+// UPDATED: Enhanced notification function with destination info
+suspend fun sendEnhancedWalkWithMeNotifications(
     firestore: FirebaseFirestore,
     currentUserId: String,
     requesterName: String,
     location: String,
+    destinationName: String? = null,
     sosRequestId: String,
     context: android.content.Context
 ): Int {
     return try {
-        Log.d("WalkWithMe", "=== ENHANCED DEBUG - Starting notification process ===")
+        Log.d("WalkWithMe", "=== ENHANCED NOTIFICATION WITH DESTINATION ===")
         Log.d("WalkWithMe", "Requester: $requesterName (ID: $currentUserId)")
         Log.d("WalkWithMe", "Location: $location")
+        Log.d("WalkWithMe", "Destination: ${destinationName ?: "None set"}")
         Log.d("WalkWithMe", "SOS Request ID: $sosRequestId")
 
         // Get personal emergency contacts
@@ -407,23 +483,7 @@ suspend fun sendWalkWithMeNotifications(
 
         if (personalContactsSnapshot.documents.isEmpty()) {
             Log.w("WalkWithMe", "No personal contacts found for user: $currentUserId")
-
-            // DEBUG: Check if the collection exists
-            val parentDoc = firestore.collection("Personal_Contacts")
-                .document(currentUserId)
-                .get()
-                .await()
-
-            Log.d("WalkWithMe", "Parent document exists: ${parentDoc.exists()}")
             return 0
-        }
-
-        // DEBUG: Log all contacts found
-        Log.d("WalkWithMe", "=== ALL CONTACTS FOUND ===")
-        for (contactDoc in personalContactsSnapshot.documents) {
-            val phoneNumber = contactDoc.getString("phoneNumber")?.trim()
-            val contactName = contactDoc.getString("name") ?: "Contact"
-            Log.d("WalkWithMe", "Contact: '$contactName', Phone: '$phoneNumber'")
         }
 
         var notificationsSent = 0
@@ -439,17 +499,12 @@ suspend fun sendWalkWithMeNotifications(
             }
 
             Log.d("WalkWithMe", "=== PROCESSING CONTACT: $contactName ===")
-            Log.d("WalkWithMe", "Original phone: '$phoneNumber'")
 
             // Try multiple phone number formats to find matching users
             val phoneVariants = generatePhoneVariants(phoneNumber)
-            Log.d("WalkWithMe", "Generated phone variants: $phoneVariants")
-
             var foundUser = false
 
             for (phoneVariant in phoneVariants) {
-                Log.d("WalkWithMe", "Searching for users with phone variant: '$phoneVariant'")
-
                 try {
                     // Search for users with this phone number
                     val usersQuery = firestore.collection("Users")
@@ -457,30 +512,34 @@ suspend fun sendWalkWithMeNotifications(
                         .get()
                         .await()
 
-                    Log.d("WalkWithMe", "Query result: ${usersQuery.documents.size} users found for '$phoneVariant'")
-
                     for (userDoc in usersQuery.documents) {
                         val targetUserName = userDoc.getString("name") ?: "User"
                         val targetUserId = userDoc.id
-                        val targetUserPhone = userDoc.getString("phone")
 
                         Log.d("WalkWithMe", "✅ USER MATCH FOUND!")
                         Log.d("WalkWithMe", "Target User: $targetUserName")
                         Log.d("WalkWithMe", "Target ID: $targetUserId")
-                        Log.d("WalkWithMe", "Target Phone in DB: '$targetUserPhone'")
-                        Log.d("WalkWithMe", "Matched with variant: '$phoneVariant'")
 
-                        // Create notification document (real-time listener will pick this up instantly)
+                        // ENHANCED: Create notification with destination info
+                        val notificationTitle = "Walk With Me Request"
+                        val notificationBody = if (destinationName != null) {
+                            "$requesterName needs someone to walk with them to $destinationName"
+                        } else {
+                            "$requesterName needs someone to walk with them"
+                        }
+
                         val notificationData = mapOf(
                             "recipientUserId" to targetUserId,
                             "recipientName" to targetUserName,
                             "senderName" to requesterName,
                             "senderUserId" to currentUserId,
                             "type" to "walk_with_me_request",
-                            "title" to "Walk With Me Request",
-                            "body" to "$requesterName needs someone to walk with them",
+                            "title" to notificationTitle,
+                            "body" to notificationBody,
                             "sosRequestId" to sosRequestId,
                             "location" to location,
+                            "destinationName" to (destinationName ?: ""),
+                            "hasDestination" to (destinationName != null),
                             "timestamp" to FieldValue.serverTimestamp(),
                             "status" to "pending"
                         )
@@ -489,8 +548,8 @@ suspend fun sendWalkWithMeNotifications(
                             .add(notificationData)
                             .await()
 
-                        Log.d("WalkWithMe", "✅ Notification document created: ${notificationRef.id}")
-                        Log.d("WalkWithMe", "Data: $notificationData")
+                        Log.d("WalkWithMe", "✅ Enhanced notification created: ${notificationRef.id}")
+                        Log.d("WalkWithMe", "Notification body: $notificationBody")
 
                         notificationsSent++
                         foundUser = true
@@ -505,35 +564,21 @@ suspend fun sendWalkWithMeNotifications(
 
             if (!foundUser) {
                 Log.w("WalkWithMe", "❌ No app user found for contact: $contactName ($phoneNumber)")
-
-                // DEBUG: Show ALL users in database for comparison
-                try {
-                    Log.d("WalkWithMe", "=== ALL USERS IN DATABASE (for debugging) ===")
-                    val allUsers = firestore.collection("Users").limit(10).get().await()
-                    for (user in allUsers.documents) {
-                        val userName = user.getString("name")
-                        val userPhone = user.getString("phone")
-                        Log.d("WalkWithMe", "DB User: '$userName', Phone: '$userPhone'")
-                    }
-                } catch (e: Exception) {
-                    Log.e("WalkWithMe", "Error getting users for debug", e)
-                }
             }
         }
 
-        Log.d("WalkWithMe", "=== NOTIFICATION PROCESS COMPLETE ===")
-        Log.d("WalkWithMe", "Total notifications created: $notificationsSent")
-        Log.d("WalkWithMe", "Real-time listeners should pick these up automatically!")
+        Log.d("WalkWithMe", "=== ENHANCED NOTIFICATION PROCESS COMPLETE ===")
+        Log.d("WalkWithMe", "Total enhanced notifications sent: $notificationsSent")
 
         notificationsSent
 
     } catch (e: Exception) {
-        Log.e("WalkWithMe", "Error in sendWalkWithMeNotifications", e)
+        Log.e("WalkWithMe", "Error in sendEnhancedWalkWithMeNotifications", e)
         0
     }
 }
 
-// Improved generatePhoneVariants function for Malaysian phone numbers
+// Phone variants generation function for Malaysian phone numbers
 fun generatePhoneVariants(phoneNumber: String): List<String> {
     val cleanNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
     val variants = mutableSetOf<String>()

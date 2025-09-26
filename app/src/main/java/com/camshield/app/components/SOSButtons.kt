@@ -323,7 +323,7 @@ fun ModernSOSButton(
 
     Card(
         modifier = modifier
-            .size(width = 70.dp, height = 70.dp)
+            .size(width = 60.dp, height = 60.dp)
             .scale(scale)
             .pointerInput(Unit) {
                 detectTapGestures(
@@ -375,7 +375,7 @@ fun ModernSOSButton(
                 Text(
                     text = "SOS",
                     color = Color.White,
-                    fontSize = if (isHolding) 20.sp else 24.sp,
+                    fontSize = if (isHolding) 18.sp else 20.sp,
                     fontWeight = FontWeight.Bold
                 )
 

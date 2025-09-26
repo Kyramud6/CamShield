@@ -49,6 +49,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.ui.window.Dialog
 import com.camshield.app.App
 import com.google.firebase.firestore.SetOptions
 
@@ -724,6 +725,10 @@ fun MobileMedicalInfoSection() {
     val bloodTypeOptions = listOf("A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-")
     var bloodTypeExpanded by remember { mutableStateOf(false) }
 
+    // Date picker states
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState()
+
     // Auto-scroll to message when it appears
     LaunchedEffect(saveMessage) {
         if (saveMessage.isNotEmpty()) {
@@ -823,7 +828,7 @@ fun MobileMedicalInfoSection() {
             }
         }
 
-        // MESSAGE CARD
+        // MESSAGE CARD (same as before)
         AnimatedVisibility(
             visible = saveMessage.isNotEmpty(),
             enter = slideInVertically(
@@ -918,16 +923,53 @@ fun MobileMedicalInfoSection() {
         // Basic Information
         MobileCard(title = "Basic Information") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                MobileTextField(
-                    label = "Date of Birth",
-                    value = dateOfBirth,
-                    onValueChange = { dateOfBirth = it },
-                    icon = Icons.Outlined.DateRange,
-                    isEditable = true,
-                    placeholder = "DD/MM/YYYY"
+                // Date of Birth Field with Date Picker
+                OutlinedTextField(
+                    value = if (dateOfBirth.isNotEmpty()) dateOfBirth else "",
+                    onValueChange = { }, // Read-only, controlled by date picker
+                    label = { Text("Date of Birth", fontSize = 14.sp) },
+                    placeholder = {
+                        Text(
+                            "Tap to select date",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.DateRange,
+                            contentDescription = null,
+                            tint = Color(0xFF667eea),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    },
+                    trailingIcon = {
+                        IconButton(
+                            onClick = { showDatePicker = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = "Select Date",
+                                tint = Color(0xFF667eea),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    },
+                    readOnly = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .clickable { showDatePicker = true },
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF667eea),
+                        unfocusedBorderColor = Color(0xFFE2E8F0),
+                        focusedLabelColor = Color(0xFF667eea),
+                        unfocusedLabelColor = Color(0xFF6C757D)
+                    )
                 )
 
-                // Blood Type Dropdown
+                // Blood Type Dropdown (same as before)
                 ExposedDropdownMenuBox(
                     expanded = bloodTypeExpanded,
                     onExpandedChange = { bloodTypeExpanded = it },
@@ -1013,6 +1055,7 @@ fun MobileMedicalInfoSection() {
                     }
                 }
 
+                // Height and Weight Row (same as before)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1040,7 +1083,7 @@ fun MobileMedicalInfoSection() {
             }
         }
 
-        // Medical History & Conditions
+        // Medical History & Conditions (same as before)
         MobileCard(title = "Medical History & Conditions") {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -1058,11 +1101,11 @@ fun MobileMedicalInfoSection() {
                     placeholder = { Text("Enter any past medical conditions, surgeries, etc.", fontSize = 12.sp, color = Color.Gray) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 100.dp, max = 200.dp), // Dynamic height
+                        .heightIn(min = 100.dp, max = 200.dp),
                     minLines = 4,
-                    maxLines = 8, // Allow more lines
+                    maxLines = 8,
                     shape = RoundedCornerShape(12.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp), // Better line spacing
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF667eea),
                         unfocusedBorderColor = Color(0xFFE2E8F0),
@@ -1086,11 +1129,11 @@ fun MobileMedicalInfoSection() {
                     placeholder = { Text("List any known allergies (food, medication, etc.)", fontSize = 12.sp, color = Color.Gray) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 80.dp, max = 160.dp), // Dynamic height
+                        .heightIn(min = 80.dp, max = 160.dp),
                     minLines = 3,
-                    maxLines = 6, // Allow more lines
+                    maxLines = 6,
                     shape = RoundedCornerShape(12.dp),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp), // Better line spacing
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Color(0xFF667eea),
                         unfocusedBorderColor = Color(0xFFE2E8F0),
@@ -1101,7 +1144,7 @@ fun MobileMedicalInfoSection() {
             }
         }
 
-        // Current Medication
+        // Current Medication (same as before)
         MobileCard(title = "Current Medication") {
             OutlinedTextField(
                 value = currentMedication,
@@ -1118,11 +1161,11 @@ fun MobileMedicalInfoSection() {
                 placeholder = { Text("List current medications, dosages, and frequency", fontSize = 12.sp, color = Color.Gray) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 100.dp, max = 200.dp), // Dynamic height
+                    .heightIn(min = 100.dp, max = 200.dp),
                 minLines = 4,
-                maxLines = 8, // Allow more lines
+                maxLines = 8,
                 shape = RoundedCornerShape(12.dp),
-                textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp), // Better line spacing
+                textStyle = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Color(0xFF667eea),
                     unfocusedBorderColor = Color(0xFFE2E8F0),
@@ -1132,7 +1175,7 @@ fun MobileMedicalInfoSection() {
             )
         }
 
-        // Save Button
+        // Save Button (same as before)
         Button(
             onClick = {
                 saveMessage = "⏳ Saving medical information..."
@@ -1196,8 +1239,129 @@ fun MobileMedicalInfoSection() {
             }
         }
     }
+
+    // Date Picker Dialog
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDateSelected = { selectedDate ->
+                dateOfBirth = selectedDate
+                showDatePicker = false
+            },
+            onDismiss = {
+                showDatePicker = false
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DatePickerDialog(
+    onDateSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val datePickerState = rememberDatePickerState()
+
+    // Function to format date from milliseconds
+    fun formatDate(millis: Long?): String {
+        return if (millis != null) {
+            val calendar = java.util.Calendar.getInstance()
+            calendar.timeInMillis = millis
+            val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+            val month = calendar.get(java.util.Calendar.MONTH) + 1 // Month is 0-based
+            val year = calendar.get(java.util.Calendar.YEAR)
+            String.format("%02d/%02d/%d", day, month, year)
+        } else ""
+    }
+
+    Dialog(
+        onDismissRequest = { onDismiss() }
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // Compact Header
+                Text(
+                    text = "Select Date of Birth",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF2D3748),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+
+                // Compact Date Picker
+                DatePicker(
+                    state = datePickerState,
+                    modifier = Modifier.fillMaxWidth(),
+                    showModeToggle = false, // Hide the toggle to make it smaller
+                    title = null, // Remove title to save space
+                    headline = null // Remove headline to save space
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = { onDismiss() }
+                    ) {
+                        Text(
+                            "Cancel",
+                            color = Color(0xFF6C757D),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Button(
+                        onClick = {
+                            datePickerState.selectedDateMillis?.let { dateMillis ->
+                                val formattedDate = formatDate(dateMillis)
+                                onDateSelected(formattedDate)
+                            }
+                        },
+                        enabled = datePickerState.selectedDateMillis != null,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF667eea),
+                            disabledContainerColor = Color(0xFF667eea).copy(alpha = 0.5f)
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            "Select Date",
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Show selected date preview
+                datePickerState.selectedDateMillis?.let { millis ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Selected: ${formatDate(millis)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF667eea),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        }
+    }
+}
 
 // Mobile-optimized components
 @Composable

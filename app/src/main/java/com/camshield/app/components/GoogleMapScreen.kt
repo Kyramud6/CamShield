@@ -1,4 +1,4 @@
-// Updated GoogleMapScreen.kt - Add callback for route info
+// Updated GoogleMapScreen.kt - Add clear/reset functionality
 package com.camshield.app.components
 
 import android.Manifest
@@ -33,31 +33,10 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import android.os.Handler
 import android.os.Looper
+import kotlin.math.*
 
-// Data classes for Directions API
-data class DirectionsResponse(val routes: List<Route>, val status: String)
-data class Route(val legs: List<Leg>, val overview_polyline: OverviewPolyline)
-data class Leg(val steps: List<Step>, val distance: Distance, val duration: Duration)
-data class Step(
-    val html_instructions: String,
-    val distance: Distance,
-    val duration: Duration,
-    val start_location: LocationData,
-    val end_location: LocationData,
-    val polyline: OverviewPolyline,
-    val maneuver: String?
-)
-data class Distance(val text: String, val value: Int)
-data class Duration(val text: String, val value: Int)
-data class LocationData(val lat: Double, val lng: Double)
-data class OverviewPolyline(val points: String)
-data class NavigationState(
-    val isNavigating: Boolean = false,
-    val currentStep: Step? = null,
-    val stepIndex: Int = 0,
-    val totalSteps: Int = 0,
-    val distanceToDestination: String? = null
-)
+// Import centralized data classes
+import com.camshield.app.data.*
 
 // Retrofit interface for Directions API
 interface DirectionsService {
@@ -76,14 +55,18 @@ fun GoogleMapScreen(
     destinationLatLng: LatLng?,
     currentLocationState: MutableState<String?>,
     locationPermissionGranted: Boolean,
+    isInNavigationMode: Boolean = false,
     onNavigationUpdate: (NavigationState) -> Unit = {},
     onLocationUpdate: (LatLng?) -> Unit = {},
     modifier: Modifier = Modifier,
     onRouteLoadingStateChanged: (Boolean) -> Unit = {},
-    // NEW: Callback for route info
     onRouteInfoUpdate: (RouteInfo?) -> Unit = {},
     shouldStartNavigation: Boolean = false,
-    onNavigationStarted: () -> Unit = {}
+    onNavigationStarted: () -> Unit = {},
+    routeInfo: RouteInfo? = null,
+    // NEW: Add reset/clear parameters
+    shouldClearAll: Boolean = false,
+    onClearCompleted: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
@@ -102,11 +85,60 @@ fun GoogleMapScreen(
     var currentStepIndex by remember { mutableStateOf(0) }
     var routePoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
     var isNavigating by remember { mutableStateOf(false) }
+    var userBearing by remember { mutableStateOf(0f) }
+
+    // Store location callback reference for cleanup
+    var locationCallback by remember { mutableStateOf<LocationCallback?>(null) }
+
+    // NEW: Clear/Reset functionality
+    LaunchedEffect(shouldClearAll) {
+        if (shouldClearAll) {
+            Log.d("MapScreen", "Clearing all map data and stopping navigation")
+
+            // Stop all location updates
+            locationCallback?.let { callback ->
+                fusedLocationClient.removeLocationUpdates(callback)
+            }
+
+            // Reset all navigation states
+            isNavigating = false
+            routeSteps = emptyList()
+            routePoints = emptyList()
+            currentStepIndex = 0
+
+            // Reset location states (but keep permission status)
+            userLocation = null
+            locationAccuracy = null
+            locationSource = null
+            isRefiningLocation = false
+            locationAge = null
+            isLocationLoading = true
+            userBearing = 0f
+
+            // Clear parent component states
+            onNavigationUpdate(NavigationState()) // Reset navigation state
+            onRouteInfoUpdate(null) // Clear route info
+            onLocationUpdate(null) // Clear location
+            onRouteLoadingStateChanged(false) // Stop any loading
+
+            // Reset location state message
+            currentLocationState.value = if (hasLocationPermission) {
+                "Location cleared"
+            } else {
+                "Location permission required"
+            }
+
+            // Notify parent that clear is complete
+            onClearCompleted()
+
+            Log.d("MapScreen", "Map cleared successfully")
+        }
+    }
 
     // Update permission state
     LaunchedEffect(locationPermissionGranted) {
         hasLocationPermission = locationPermissionGranted
-        if (locationPermissionGranted) {
+        if (locationPermissionGranted && !shouldClearAll) {
             currentLocationState.value = "Finding location..."
         }
     }
@@ -119,9 +151,9 @@ fun GoogleMapScreen(
             .create(DirectionsService::class.java)
     }
 
-    // NEW: Load route when destination is set (but don't start navigation)
+    // Load route when destination is set (but don't start navigation)
     LaunchedEffect(destinationLatLng, userLocation) {
-        if (destinationLatLng != null && userLocation != null && !isNavigating && !shouldStartNavigation) {
+        if (destinationLatLng != null && userLocation != null && !isNavigating && !shouldStartNavigation && !shouldClearAll) {
             Log.d("Route", "Loading route preview from $userLocation to $destinationLatLng")
             onRouteLoadingStateChanged(true)
 
@@ -134,7 +166,6 @@ fun GoogleMapScreen(
                     Log.d("Route", "Route preview loaded with ${steps.size} steps")
                     routeSteps = steps
                     routePoints = polylinePoints
-                    // Update route info in the panel
                     onRouteInfoUpdate(routeInfo)
                     onRouteLoadingStateChanged(false)
                     currentLocationState.value = "Route loaded - ready to navigate"
@@ -151,10 +182,9 @@ fun GoogleMapScreen(
 
     // Navigation trigger - START navigation when button pressed
     LaunchedEffect(shouldStartNavigation, destinationLatLng, userLocation) {
-        if (shouldStartNavigation && destinationLatLng != null && userLocation != null && !isNavigating) {
+        if (shouldStartNavigation && destinationLatLng != null && userLocation != null && !isNavigating && !shouldClearAll) {
             Log.d("Navigation", "Starting navigation from $userLocation to $destinationLatLng")
 
-            // If we already have route steps, start navigation immediately
             if (routeSteps.isNotEmpty()) {
                 Log.d("Navigation", "Using existing route steps")
                 isNavigating = true
@@ -171,7 +201,6 @@ fun GoogleMapScreen(
                 onNavigationStarted()
                 currentLocationState.value = "Navigation started!"
             } else {
-                // Need to load route first
                 onRouteLoadingStateChanged(true)
                 getDirectionsAndLoadRoute(
                     service = directionsService,
@@ -210,7 +239,7 @@ fun GoogleMapScreen(
 
     // Reset navigation when destination changes
     LaunchedEffect(destinationLatLng) {
-        if (isNavigating) {
+        if (isNavigating && !shouldClearAll) {
             isNavigating = false
             routeSteps = emptyList()
             routePoints = emptyList()
@@ -221,8 +250,8 @@ fun GoogleMapScreen(
     }
 
     // CACHE FIRST + FRESH LOCATION REFINEMENT
-    LaunchedEffect(hasLocationPermission) {
-        if (hasLocationPermission) {
+    LaunchedEffect(hasLocationPermission, shouldClearAll) {
+        if (hasLocationPermission && !shouldClearAll) {
             getCachedThenFreshLocationWithRefinement(fusedLocationClient) { location, accuracy, source, age, isRefining ->
                 userLocation = location
                 locationAccuracy = accuracy
@@ -231,7 +260,6 @@ fun GoogleMapScreen(
                 isLocationLoading = false
                 isRefiningLocation = isRefining
 
-                // Update parent component
                 onLocationUpdate(location)
 
                 val ageText = when {
@@ -253,27 +281,35 @@ fun GoogleMapScreen(
                     else -> "Location found ($accuracyText • $ageText)"
                 }
             }
-        } else {
+        } else if (!hasLocationPermission) {
             currentLocationState.value = "Location permission required"
             isLocationLoading = false
         }
     }
 
     // Continuous location updates for real-time tracking
-    val locationCallback = remember {
+    val continuousLocationCallback = remember {
         object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
+                if (shouldClearAll) return // Don't process if clearing
+
                 locationResult.lastLocation?.let { location ->
                     val newLocation = LatLng(location.latitude, location.longitude)
+                    val previousLocation = userLocation
+
                     userLocation = newLocation
                     locationAccuracy = location.accuracy
                     locationSource = location.provider?.uppercase() ?: "GPS"
                     locationAge = System.currentTimeMillis() - location.time
 
-                    // Update parent component
+                    if (location.hasBearing()) {
+                        userBearing = location.bearing
+                    } else if (previousLocation != null) {
+                        userBearing = calculateBearing(previousLocation, newLocation).toFloat()
+                    }
+
                     onLocationUpdate(newLocation)
 
-                    // Update navigation if active
                     if (isNavigating && routeSteps.isNotEmpty()) {
                         updateNavigationProgress(newLocation, routeSteps, currentStepIndex) { newIndex ->
                             currentStepIndex = newIndex
@@ -285,7 +321,6 @@ fun GoogleMapScreen(
                                 distanceToDestination = calculateDistance(newLocation, destinationLatLng)
                             ))
 
-                            // Check if navigation is complete
                             if (newIndex >= routeSteps.size - 1) {
                                 Log.d("Navigation", "Navigation completed!")
                                 currentLocationState.value = "Destination reached!"
@@ -297,25 +332,34 @@ fun GoogleMapScreen(
         }
     }
 
-    // Start continuous updates after getting initial location
-    LaunchedEffect(userLocation, hasLocationPermission) {
-        if (hasLocationPermission && userLocation != null) {
-            val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 3000L)
-                .setMinUpdateIntervalMillis(1000L)
-                .setMinUpdateDistanceMeters(3f)
+    // Store callback reference and start continuous updates
+    LaunchedEffect(userLocation, hasLocationPermission, shouldClearAll) {
+        if (hasLocationPermission && userLocation != null && !shouldClearAll) {
+            locationCallback = continuousLocationCallback
+
+            val locationRequest = LocationRequest.Builder(
+                Priority.PRIORITY_HIGH_ACCURACY,
+                if (isNavigating) 1000L else 3000L
+            )
+                .setMinUpdateIntervalMillis(if (isNavigating) 500L else 1000L)
+                .setMinUpdateDistanceMeters(if (isNavigating) 1f else 3f)
                 .build()
 
             try {
-                fusedLocationClient.requestLocationUpdates(locationRequest, locationCallback, null)
+                fusedLocationClient.requestLocationUpdates(locationRequest, continuousLocationCallback, null)
             } catch (e: SecurityException) {
-                // Handle silently
+                Log.e("MapScreen", "Location permission error: ${e.message}")
             }
         }
     }
 
+    // Cleanup when component disposes or clears
     DisposableEffect(Unit) {
         onDispose {
-            fusedLocationClient.removeLocationUpdates(locationCallback)
+            Log.d("MapScreen", "Disposing map component - cleaning up location updates")
+            locationCallback?.let { callback ->
+                fusedLocationClient.removeLocationUpdates(callback)
+            }
         }
     }
 
@@ -334,13 +378,48 @@ fun GoogleMapScreen(
         )
     }
 
-    // Smooth camera updates
-    LaunchedEffect(userLocation) {
+    // Enhanced camera updates for visual navigation mode
+    LaunchedEffect(userLocation, isInNavigationMode, isNavigating, userBearing, shouldClearAll) {
+        if (shouldClearAll) return@LaunchedEffect
+
         userLocation?.let { location ->
             scope.launch {
+                val cameraUpdate = if (isInNavigationMode && isNavigating) {
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(location)
+                            .zoom(19f)
+                            .bearing(userBearing)
+                            .tilt(65f)
+                            .build()
+                    )
+                } else if (isInNavigationMode) {
+                    CameraUpdateFactory.newCameraPosition(
+                        CameraPosition.Builder()
+                            .target(location)
+                            .zoom(18f)
+                            .bearing(0f)
+                            .tilt(45f)
+                            .build()
+                    )
+                } else {
+                    CameraUpdateFactory.newLatLngZoom(location, 17f)
+                }
+
+                val duration = if (isInNavigationMode && isNavigating) 800 else 1000
+                cameraPositionState.animate(cameraUpdate, duration)
+            }
+        }
+    }
+
+    // NEW: Reset camera when clearing
+    LaunchedEffect(shouldClearAll) {
+        if (shouldClearAll) {
+            scope.launch {
+                val defaultPosition = CameraPosition.fromLatLngZoom(LatLng(2.814, 101.758), 15f)
                 cameraPositionState.animate(
-                    CameraUpdateFactory.newLatLngZoom(location, 17f),
-                    durationMs = 800
+                    CameraUpdateFactory.newCameraPosition(defaultPosition),
+                    500
                 )
             }
         }
@@ -351,113 +430,146 @@ fun GoogleMapScreen(
             modifier = Modifier.fillMaxSize(),
             cameraPositionState = cameraPositionState,
             properties = MapProperties(
-                isMyLocationEnabled = hasLocationPermission && userLocation != null,
+                isMyLocationEnabled = hasLocationPermission && userLocation != null && !shouldClearAll,
                 mapType = MapType.NORMAL
             ),
             uiSettings = MapUiSettings(
-                myLocationButtonEnabled = true,
-                zoomControlsEnabled = true,
-                compassEnabled = true,
-                rotationGesturesEnabled = true,
-                scrollGesturesEnabled = true,
-                tiltGesturesEnabled = true,
+                myLocationButtonEnabled = !isInNavigationMode,
+                zoomControlsEnabled = !isInNavigationMode,
+                compassEnabled = !isInNavigationMode,
+                mapToolbarEnabled = false,
+                rotationGesturesEnabled = !isInNavigationMode,
+                scrollGesturesEnabled = !isInNavigationMode,
+                tiltGesturesEnabled = !isInNavigationMode,
                 zoomGesturesEnabled = true
             )
         ) {
-            // Campus polygon
-            Polygon(
-                points = campusBoundary,
-                strokeColor = Color.Red,
-                fillColor = Color(0x44FF0000),
-                strokeWidth = 3f
-            )
-
-            // User location marker with accuracy circle
-            userLocation?.let { location ->
-                // Accuracy circle - color based on accuracy and age
-                locationAccuracy?.let { accuracy ->
-                    val circleColor = when {
-                        locationAge != null && locationAge!! > 300000 -> Color.Gray.copy(alpha = 0.3f) // Old location
-                        accuracy <= 50f -> Color.Blue.copy(alpha = 0.3f) // Good accuracy
-                        else -> Color.Yellow.copy(alpha = 0.3f) // Poor accuracy
-                    }
-
-                    Circle(
-                        center = location,
-                        radius = accuracy.toDouble(),
-                        strokeColor = circleColor,
-                        fillColor = circleColor.copy(alpha = 0.1f),
-                        strokeWidth = 2f
+            // Only show map elements if not clearing
+            if (!shouldClearAll) {
+                // Campus polygon - hide in navigation mode
+                if (!isInNavigationMode) {
+                    Polygon(
+                        points = campusBoundary,
+                        strokeColor = Color.Red,
+                        fillColor = Color(0x44FF0000),
+                        strokeWidth = 3f
                     )
                 }
 
-                // Location marker with age indicator
-                val markerSnippet = buildString {
-                    append("±${locationAccuracy?.toInt() ?: 0}m accuracy")
-                    locationSource?.let { append(" • $it") }
-                    locationAge?.let { age ->
-                        val ageSeconds = age / 1000
-                        when {
-                            ageSeconds < 60 -> append(" • ${ageSeconds}s ago")
-                            ageSeconds < 3600 -> append(" • ${ageSeconds/60}m ago")
-                            else -> append(" • ${ageSeconds/3600}h ago")
+                // User location marker with accuracy circle
+                userLocation?.let { location ->
+                    if (!isInNavigationMode) {
+                        locationAccuracy?.let { accuracy ->
+                            val circleColor = when {
+                                locationAge != null && locationAge!! > 300000 -> Color.Gray.copy(alpha = 0.3f)
+                                accuracy <= 50f -> Color.Blue.copy(alpha = 0.3f)
+                                else -> Color.Yellow.copy(alpha = 0.3f)
+                            }
+
+                            Circle(
+                                center = location,
+                                radius = accuracy.toDouble(),
+                                strokeColor = circleColor,
+                                fillColor = circleColor.copy(alpha = 0.1f),
+                                strokeWidth = 2f
+                            )
                         }
                     }
-                }
 
-                Marker(
-                    state = MarkerState(position = location),
-                    title = "Your Location",
-                    snippet = markerSnippet
-                )
-            }
+                    val markerSnippet = if (isInNavigationMode) {
+                        if (isNavigating) "Navigating..." else "Ready to navigate"
+                    } else {
+                        buildString {
+                            append("±${locationAccuracy?.toInt() ?: 0}m accuracy")
+                            locationSource?.let { append(" • $it") }
+                            locationAge?.let { age ->
+                                val ageSeconds = age / 1000
+                                when {
+                                    ageSeconds < 60 -> append(" • ${ageSeconds}s ago")
+                                    ageSeconds < 3600 -> append(" • ${ageSeconds/60}m ago")
+                                    else -> append(" • ${ageSeconds/3600}h ago")
+                                }
+                            }
+                        }
+                    }
 
-            // Destination marker
-            destinationLatLng?.let {
-                Marker(
-                    state = MarkerState(position = it),
-                    title = "Destination",
-                    snippet = if (isNavigating) "Navigating here" else "Tap Start Navigation"
-                )
-            }
-
-            // Route visualization - Enhanced for better visibility
-            if (routePoints.size > 1) {
-                Polyline(
-                    points = routePoints,
-                    color = if (isNavigating) Color(0xFF1976D2) else Color(0xFF757575),
-                    width = if (isNavigating) 8f else 5f
-                )
-            }
-
-            // Navigation step markers - Only show current and next step
-            if (isNavigating && routeSteps.isNotEmpty()) {
-                // Current step marker
-                if (currentStepIndex < routeSteps.size) {
-                    val currentStep = routeSteps[currentStepIndex]
-                    val position = LatLng(currentStep.start_location.lat, currentStep.start_location.lng)
                     Marker(
-                        state = MarkerState(position = position),
-                        title = "Current Step",
-                        snippet = cleanHtmlInstructions(currentStep.html_instructions)
+                        state = MarkerState(position = location),
+                        title = "Your Location",
+                        snippet = markerSnippet
                     )
                 }
 
-                // Next step marker
-                if (currentStepIndex + 1 < routeSteps.size) {
-                    val nextStep = routeSteps[currentStepIndex + 1]
-                    val position = LatLng(nextStep.start_location.lat, nextStep.start_location.lng)
+                // Destination marker
+                destinationLatLng?.let {
                     Marker(
-                        state = MarkerState(position = position),
-                        title = "Next Step",
-                        snippet = cleanHtmlInstructions(nextStep.html_instructions)
+                        state = MarkerState(position = it),
+                        title = "Destination",
+                        snippet = if (isNavigating) "Navigating here" else "Tap Start Navigation"
                     )
+                }
+
+                // Route visualization
+                if (routePoints.size > 1) {
+                    if (isInNavigationMode && isNavigating) {
+                        // Navigation mode styling
+                        Polyline(points = routePoints, color = Color(0xFF2196F3).copy(alpha = 0.2f), width = 18f)
+                        Polyline(points = routePoints, color = Color.Black.copy(alpha = 0.3f), width = 12f)
+                        Polyline(points = routePoints, color = Color(0xFF1976D2), width = 8f)
+                        Polyline(points = routePoints, color = Color(0xFF42A5F5), width = 5f)
+                        Polyline(points = routePoints, color = Color.White.copy(alpha = 0.8f), width = 1.5f)
+
+                        if (currentStepIndex < routeSteps.size) {
+                            val nextTurn = routeSteps[currentStepIndex]
+                            val turnPosition = LatLng(nextTurn.end_location.lat, nextTurn.end_location.lng)
+
+                            Circle(
+                                center = turnPosition,
+                                radius = 5.0,
+                                strokeColor = Color(0xFF1976D2),
+                                fillColor = Color(0xFF42A5F5),
+                                strokeWidth = 2f
+                            )
+                        }
+                    } else if (routeInfo != null) {
+                        // Route preview styling
+                        Polyline(points = routePoints, color = Color.Black.copy(alpha = 0.2f), width = 8f)
+                        Polyline(points = routePoints, color = Color(0xFF546E7A), width = 6f)
+                        Polyline(points = routePoints, color = Color(0xFF78909C), width = 3f)
+                        Polyline(points = routePoints, color = Color.White.copy(alpha = 0.6f), width = 1f)
+                    } else {
+                        // Basic route
+                        Polyline(points = routePoints, color = Color(0xFF757575), width = 4f)
+                    }
+                }
+
+                // Navigation step markers
+                if (isNavigating && routeSteps.isNotEmpty() && !isInNavigationMode) {
+                    if (currentStepIndex < routeSteps.size) {
+                        val currentStep = routeSteps[currentStepIndex]
+                        val position = LatLng(currentStep.start_location.lat, currentStep.start_location.lng)
+                        Marker(
+                            state = MarkerState(position = position),
+                            title = "Current Step",
+                            snippet = cleanHtmlInstructions(currentStep.html_instructions)
+                        )
+                    }
+
+                    if (currentStepIndex + 1 < routeSteps.size) {
+                        val nextStep = routeSteps[currentStepIndex + 1]
+                        val position = LatLng(nextStep.start_location.lat, nextStep.start_location.lng)
+                        Marker(
+                            state = MarkerState(position = position),
+                            title = "Next Step",
+                            snippet = cleanHtmlInstructions(nextStep.html_instructions)
+                        )
+                    }
                 }
             }
         }
 
-        // Loading indicator - only shows initially and briefly
-        if (isLocationLoading && hasLocationPermission) {
+        // Loading indicator
+        if (isLocationLoading && hasLocationPermission && !isInNavigationMode && !shouldClearAll) {
             Card(
                 modifier = Modifier
                     .align(Alignment.Center)
@@ -479,7 +591,7 @@ fun GoogleMapScreen(
         }
 
         // Permission warning
-        if (!hasLocationPermission) {
+        if (!hasLocationPermission && !shouldClearAll) {
             Card(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -494,72 +606,71 @@ fun GoogleMapScreen(
             }
         }
 
-        // Enhanced location info panel
-        locationAccuracy?.let { accuracy ->
-            Card(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = when {
-                        locationAge != null && locationAge!! > 300000 -> Color(0xFF9E9E9E).copy(alpha = 0.9f) // Old - Gray
-                        accuracy <= 10f -> Color(0xFF4CAF50).copy(alpha = 0.9f) // Excellent
-                        accuracy <= 30f -> Color(0xFF8BC34A).copy(alpha = 0.9f) // Good
-                        accuracy <= 100f -> Color(0xFFFFC107).copy(alpha = 0.9f) // Fair - Yellow
-                        else -> Color(0xFFF44336).copy(alpha = 0.9f) // Poor
-                    }
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(8.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isRefiningLocation) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(12.dp),
-                                strokeWidth = 1.5.dp,
-                                color = Color.White
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+        // Location info panel - hide in navigation mode
+        if (!isInNavigationMode && !shouldClearAll) {
+            locationAccuracy?.let { accuracy ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when {
+                            locationAge != null && locationAge!! > 300000 -> Color(0xFF9E9E9E).copy(alpha = 0.9f)
+                            accuracy <= 10f -> Color(0xFF4CAF50).copy(alpha = 0.9f)
+                            accuracy <= 30f -> Color(0xFF8BC34A).copy(alpha = 0.9f)
+                            accuracy <= 100f -> Color(0xFFFFC107).copy(alpha = 0.9f)
+                            else -> Color(0xFFF44336).copy(alpha = 0.9f)
                         }
-                        Text(
-                            text = "±${accuracy.toInt()}m",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = locationSource ?: "GPS",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
-
-                        // Age indicator
-                        locationAge?.let { age ->
-                            val ageText = when {
-                                age < 30000 -> "●" // Fresh - solid dot
-                                age < 300000 -> "◐" // Recent - half dot
-                                else -> "○" // Old - empty dot
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isRefiningLocation) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 1.5.dp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
                             }
                             Text(
-                                text = ageText,
+                                text = "±${accuracy.toInt()}m",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White
+                            )
+                        }
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = locationSource ?: "GPS",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+
+                            locationAge?.let { age ->
+                                val ageText = when {
+                                    age < 30000 -> "●"
+                                    age < 300000 -> "◐"
+                                    else -> "○"
+                                }
+                                Text(
+                                    text = ageText,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+
+                        if (isRefiningLocation) {
+                            Text(
+                                text = "Updating...",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                         }
-                    }
-
-                    if (isRefiningLocation) {
-                        Text(
-                            text = "Updating...",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
                     }
                 }
             }
@@ -567,30 +678,32 @@ fun GoogleMapScreen(
     }
 
     // Update boundary status
-    LaunchedEffect(userLocation) {
-        userLocation?.let { loc ->
-            val boundary = if (isInsidePolygon(loc, campusBoundary)) "Inside campus" else "Outside campus"
-            val accuracy = locationAccuracy?.let {
-                if (it <= 50f) "accurate" else if (it <= 100f) "approximate" else "rough"
-            } ?: "location"
+    LaunchedEffect(userLocation, isInNavigationMode, shouldClearAll) {
+        if (!isInNavigationMode && !shouldClearAll) {
+            userLocation?.let { loc ->
+                val boundary = if (isInsidePolygon(loc, campusBoundary)) "Inside campus" else "Outside campus"
+                val accuracy = locationAccuracy?.let {
+                    if (it <= 50f) "accurate" else if (it <= 100f) "approximate" else "rough"
+                } ?: "location"
 
-            val age = locationAge?.let { ageMs ->
-                val ageSeconds = ageMs / 1000
-                when {
-                    ageSeconds < 60 -> "fresh"
-                    ageSeconds < 300 -> "recent"
-                    else -> "cached"
+                val age = locationAge?.let { ageMs ->
+                    val ageSeconds = ageMs / 1000
+                    when {
+                        ageSeconds < 60 -> "fresh"
+                        ageSeconds < 300 -> "recent"
+                        else -> "cached"
+                    }
+                } ?: "unknown"
+
+                if (!isNavigating) {
+                    currentLocationState.value = "$boundary ($accuracy • $age)"
                 }
-            } ?: "unknown"
-
-            if (!isNavigating) { // Don't override navigation messages
-                currentLocationState.value = "$boundary ($accuracy • $age)"
             }
         }
     }
 }
 
-// NEW: Function to load route (without starting navigation)
+// Rest of the functions remain the same...
 suspend fun getDirectionsAndLoadRoute(
     service: DirectionsService,
     origin: LatLng,
@@ -643,14 +756,10 @@ suspend fun getDirectionsAndLoadRoute(
     }
 }
 
-// API Key configuration - Replace with your actual Google Maps API key
 fun getApiKey(): String {
-    // TODO: Replace with your actual Google Directions API key
-    // Get it from: https://console.cloud.google.com/apis/credentials
-    return "AIzaSyCPmhj7Hot40l9AMeJq8dKPJ-7UHq5-S3E" // Replace this with your real API key
+    return "AIzaSyCPmhj7Hot40l9AMeJq8dKPJ-7UHq5-S3E"
 }
 
-// CACHE FIRST + FRESH REFINEMENT APPROACH
 @SuppressLint("MissingPermission")
 fun getCachedThenFreshLocationWithRefinement(
     fusedLocationClient: FusedLocationProviderClient,
@@ -813,6 +922,21 @@ fun calculateDistanceInMeters(origin: LatLng, destination: LatLng): Double {
             Math.cos(Math.toRadians(destination.latitude)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
     val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     return earthRadius * c
+}
+
+// Calculate bearing between two points
+fun calculateBearing(start: LatLng, end: LatLng): Double {
+    val startLat = Math.toRadians(start.latitude)
+    val startLng = Math.toRadians(start.longitude)
+    val endLat = Math.toRadians(end.latitude)
+    val endLng = Math.toRadians(end.longitude)
+
+    val dLng = endLng - startLng
+    val y = sin(dLng) * cos(endLat)
+    val x = cos(startLat) * sin(endLat) - sin(startLat) * cos(endLat) * cos(dLng)
+
+    val bearing = atan2(y, x)
+    return (Math.toDegrees(bearing) + 360) % 360
 }
 
 fun decodePolyline(encoded: String): List<LatLng> {

@@ -46,6 +46,7 @@ import java.util.*
 fun LocationTrackingScreen(
     sosRequestId: String,
     userName: String,
+    responderName: String? = null,
     onEndTracking: () -> Unit
 ) {
     val context = LocalContext.current
@@ -57,6 +58,7 @@ fun LocationTrackingScreen(
     var trackingStartTime by remember { mutableStateOf<Date?>(null) }
     var totalDistance by remember { mutableStateOf(0f) }
     var locationPath by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+    var monitoringUser by remember { mutableStateOf(responderName ?: "Someone") }
 
     val fusedLocationClient = remember {
         LocationServices.getFusedLocationProviderClient(context)
@@ -103,6 +105,21 @@ fun LocationTrackingScreen(
                 CameraUpdateFactory.newLatLngZoom(location, 17f),
                 1000
             )
+        }
+    }
+
+    // Get monitoring user info if not provided
+    LaunchedEffect(Unit) {
+        if (responderName == null) {
+            try {
+                val sosDoc = firestore.collection("SOS").document(sosRequestId).get().await()
+                val responder = sosDoc.getString("responderName")
+                if (responder != null) {
+                    monitoringUser = responder
+                }
+            } catch (e: Exception) {
+                Log.e("LocationTracking", "Error getting responder name", e)
+            }
         }
     }
 
@@ -171,7 +188,7 @@ fun LocationTrackingScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Your contacts can monitor your journey",
+                            text = "$monitoringUser is monitoring your journey",
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 14.sp
                         )
@@ -187,6 +204,51 @@ fun LocationTrackingScreen(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
+
+                // Monitoring status card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.1f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RemoveRedEye,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Being Monitored by",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = monitoringUser,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Your location is being shared in real-time",
+                            color = Color.White.copy(alpha = 0.8f),
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Status cards
                 Row(
@@ -232,6 +294,35 @@ fun LocationTrackingScreen(
                     )
                 }
             }
+
+            // Monitoring indicator
+            Card(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF4CAF50).copy(alpha = 0.9f)
+                ),
+                shape = RoundedCornerShape(24.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(Color.White, CircleShape)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Location Sharing Active",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
         }
 
         // Bottom controls
@@ -255,7 +346,6 @@ fun LocationTrackingScreen(
 
                             // Update SOS status
                             try {
-                                // replace the .update(...) in your End Journey block with:
                                 firestore.collection("SOS")
                                     .document(sosRequestId)
                                     .set(
@@ -268,7 +358,6 @@ fun LocationTrackingScreen(
                                         SetOptions.merge()
                                     )
                                     .await()
-
 
                                 Log.d("LocationTracking", "Journey ended successfully")
                             } catch (e: Exception) {
@@ -298,15 +387,6 @@ fun LocationTrackingScreen(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Your location is being shared with your emergency contacts",
-                    color = Color.Gray,
-                    fontSize = 12.sp,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }

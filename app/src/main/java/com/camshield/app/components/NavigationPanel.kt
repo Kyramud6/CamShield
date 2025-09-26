@@ -20,15 +20,9 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import java.text.SimpleDateFormat
-import java.util.*
 
-// Add route info data class
-data class RouteInfo(
-    val totalDistance: String = "",
-    val estimatedDuration: String = "",
-    val estimatedArrivalTime: String = ""
-)
+// Import centralized data classes
+import com.camshield.app.data.*
 
 @Composable
 fun NavigationPanel(
@@ -384,44 +378,40 @@ fun BottomNavigationControls(
         ) + fadeOut(tween(400)),
         modifier = modifier
     ) {
-        // Navigation control button only (route info moved to NavigationPanel)
         Card(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 16.dp),
+                .width(200.dp)
+                .padding(end = 8.dp)
+                .padding(bottom = 8.dp),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
             ),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 if (!isNavigating) {
                     Button(
                         onClick = onStartNavigation,
                         enabled = hasLocation && !isLoadingRoute,
                         modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
+                            .fillMaxWidth()
+                            .height(38.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         if (isLoadingRoute) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp,
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                "Loading Route...",
-                                style = MaterialTheme.typography.bodyLarge.copy(
+                                "Loading...",
+                                style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             )
@@ -429,12 +419,12 @@ fun BottomNavigationControls(
                             Icon(
                                 imageVector = Icons.Default.Navigation,
                                 contentDescription = null,
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(12.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                if (hasLocation) "Start Navigation" else "Getting Location...",
-                                style = MaterialTheme.typography.bodyLarge.copy(
+                                if (hasLocation) "Start" else "Getting GPS...",
+                                style = MaterialTheme.typography.bodyMedium.copy(
                                     fontWeight = FontWeight.SemiBold
                                 )
                             )
@@ -444,22 +434,22 @@ fun BottomNavigationControls(
                     OutlinedButton(
                         onClick = onStopNavigation,
                         modifier = Modifier
-                            .weight(1f)
-                            .height(56.dp),
+                            .fillMaxWidth()
+                            .height(48.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = MaterialTheme.colorScheme.error
                         ),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(24.dp)
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            "Stop Navigation",
-                            style = MaterialTheme.typography.bodyLarge.copy(
+                            "Stop",
+                            style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.SemiBold
                             )
                         )
@@ -506,42 +496,6 @@ fun EnhancedRoutePolyline(
     }
 }
 
-// Utility function to calculate estimated arrival time
-fun calculateEstimatedArrivalTime(durationInSeconds: Int): String {
-    val calendar = Calendar.getInstance()
-    calendar.add(Calendar.SECOND, durationInSeconds)
-    val timeFormat = SimpleDateFormat("h:mm a", Locale.getDefault())
-    return timeFormat.format(calendar.time)
-}
-
-// Utility function to extract route info from directions response
-fun extractRouteInfo(route: Route): RouteInfo {
-    val totalDistance = route.legs.sumOf { it.distance.value }
-    val totalDuration = route.legs.sumOf { it.duration.value }
-
-    val distanceText = if (totalDistance < 1000) {
-        "${totalDistance}m"
-    } else {
-        String.format("%.1f km", totalDistance / 1000.0)
-    }
-
-    val durationText = if (totalDuration < 3600) {
-        "${totalDuration / 60} min"
-    } else {
-        val hours = totalDuration / 3600
-        val minutes = (totalDuration % 3600) / 60
-        if (minutes > 0) "${hours}h ${minutes}m" else "${hours}h"
-    }
-
-    val arrivalTime = calculateEstimatedArrivalTime(totalDuration)
-
-    return RouteInfo(
-        totalDistance = distanceText,
-        estimatedDuration = durationText,
-        estimatedArrivalTime = arrivalTime
-    )
-}
-
 private fun getManeuverIcon(maneuver: String?): ImageVector {
     return when (maneuver?.lowercase()) {
         "turn-left", "turn-slight-left" -> Icons.Default.TurnLeft
@@ -556,5 +510,3 @@ private fun getManeuverIcon(maneuver: String?): ImageVector {
         else -> Icons.Default.Navigation
     }
 }
-
-// cleanHtmlInstructions function moved to GoogleMapScreen.kt to avoid duplication
