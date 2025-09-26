@@ -613,9 +613,9 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
             }
 
          if ((lat == null || lon == null) && data.latitude != null && data.longitude != null) {
-  lat = parseFloat(data.latitude);
-  lon = parseFloat(data.longitude);
-}
+              lat = parseFloat(data.latitude);
+              lon = parseFloat(data.longitude);
+            }
 
             if (!isNaN(lat) && !isNaN(lon)) {
               loc = `${lat.toFixed(6)}, ${lon.toFixed(6)}`;
@@ -661,8 +661,8 @@ import { getFirestore, collection, getDocs, query, orderBy, doc, updateDoc } fro
           const typeIcon = getTypeIcon(type);
 
           const typeClass = (type || '').toLowerCase().replace(/\s+/g, '_');
-const sosCard = document.createElement("div");
-sosCard.className = `sos-card ${statusClass} ${typeClass}`;
+          const sosCard = document.createElement("div");
+                sosCard.className = `sos-card ${statusClass} ${typeClass}`;
 
           sosCard.innerHTML = `
             ${statusClass === 'urgent' ? '<div class="priority-indicator priority-urgent"></div>' : ''}
@@ -700,29 +700,29 @@ sosCard.className = `sos-card ${statusClass} ${typeClass}`;
         });
 
 
-                window.respondSOS = async function(docId) {
-  if (!docId) return;
-  try {
-    const sosRef = doc(db, "SOS", docId);
-    await updateDoc(sosRef, {
-      status: "Responded"
+      window.respondSOS = async function(docId) {
+        if (!docId) return;
+          try {
+          const sosRef = doc(db, "SOS", docId);
+          await updateDoc(sosRef, {
+          status: "Responded"
     });
-    alert("✅ Status updated to Responded");
-    loadSOS(); // Refresh the list to show updated status
-  } catch (error) {
-    console.error("Error updating status:", error);
-    alert("❌ Failed to update status");
+          alert("✅ Status updated to Responded");
+          loadSOS(); // Refresh the list to show updated status
+        } catch (error) {
+          console.error("Error updating status:", error);
+          alert("❌ Failed to update status");
   }
 };
 
         // Store SOS data for modal access
         window.sosData = sosData;
 
-      } catch (error) {
-        console.error("Error loading SOS requests:", error);
-        sosList.innerHTML = `<div class="no-data">Error loading SOS requests</div>`;
+        } catch (error) {
+         console.error("Error loading SOS requests:", error);
+          sosList.innerHTML = `<div class="no-data">Error loading SOS requests</div>`;
+        }
       }
-    }
 
     // Play Audio
     window.playAudio = function(url) {

@@ -719,7 +719,7 @@
     </div>
   </div>
 
-  <!-- Reusable Modal (place OUTSIDE the grid) -->
+  <!---Reusable Modal -->
   <div id="universalModal" class="modal">
     <div class="modal-content">
       <div class="modal-header">
@@ -784,7 +784,7 @@
   </div>
 
   <script>
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    // Fireabse configuration key
     const firebaseConfig = {
       apiKey: "AIzaSyDOaqfyMNW96fIeFxvXdZgzrnQ-bDZPgbU",
       authDomain: "camshield-50aec.firebaseapp.com",
@@ -828,7 +828,7 @@
       });
     }
 
-    // Attach a listener for each alert type
+    // A listener for each alert type
     function attachBadgeListener(type, badgeId) {
       db.collection("SOS")
         .where("type", "==", type)
@@ -836,7 +836,7 @@
           const count = snapshot.size;
           document.getElementById(badgeId).innerText = count;
 
-          // Debug log
+          
           console.log(`🔎 Listening for type "${type}"`);
           snapshot.forEach((doc) => {
             console.log(`Doc ID: ${doc.id}, data:`, doc.data());
@@ -850,7 +850,7 @@
     attachBadgeListener("fire_emergency", "badge-fire");
     attachBadgeListener("walk_with_me", "badge-walk");
 
-    // Extra: log everything in SOS collection for debugging
+    //Debug use
     db.collection("SOS").onSnapshot((snapshot) => {
       console.log("📂 All docs in SOS collection:");
       snapshot.forEach((doc) => {

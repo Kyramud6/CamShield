@@ -94,7 +94,7 @@
     const loginBtn = document.getElementById("loginBtn");
     const errorMessage = document.getElementById("errorMessage");
 
-    // Optional: redirect if already logged in
+    // Redirect after login
     onAuthStateChanged(auth, async (user) => {
       if (user) {
         try {
