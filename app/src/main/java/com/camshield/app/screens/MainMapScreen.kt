@@ -52,6 +52,7 @@ fun MainMapScreen(
     onMenuClick: () -> Unit,
     initialDestination: LatLng? = null,
     initialDestinationName: String? = null,
+    onClearDestination: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -214,6 +215,38 @@ fun MainMapScreen(
         isLoadingRoute = false
         // Clear from cache
         clearNavigationCache(sharedPrefs)
+
+        //Clear parent state in MainApp
+        onClearDestination?.invoke()
+
+        val currentUser = FirebaseAuth.getInstance().currentUser
+        if (currentUser != null) {
+            FirebaseFirestore.getInstance()
+                .collection("Users")
+                .document(currentUser.uid)
+                .update("currentDestination", null)
+
+            FirebaseFirestore.getInstance()
+                .collection("SOS")
+                .whereEqualTo("userId", currentUser.uid)
+                .whereEqualTo("status", "Active")
+                .get()
+                .addOnSuccessListener { documents ->
+                    for (document in documents) {
+                        document.reference.update(
+                            mapOf(
+                                "destinationLatitude" to null,
+                                "destinationLongitude" to null,
+                                "destinationName" to null
+                            )
+                        )
+                        Log.d("MainMapScreen", "Cleared destination from SOS: ${document.id}")
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("MainMapScreen", "Failed to clear SOS destination: ${e.message}")
+                }
+        }
     }
 
     Box(modifier = modifier.fillMaxSize()) {

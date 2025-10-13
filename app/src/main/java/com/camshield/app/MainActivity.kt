@@ -331,12 +331,12 @@ fun AppNavigation(currentIntent: Intent?) {
                     } catch (e: Exception) {
                         Log.e("Dialog", "Decline error", e)
                     }
+                    // Reset dialog
+                    showWalkRequestDialog = false
+                    walkRequestData = null
+                    currentDialogId = ""
                 }
 
-                // Reset dialog
-                showWalkRequestDialog = false
-                walkRequestData = null
-                currentDialogId = ""
             }
         )
     }

@@ -701,7 +701,7 @@ fun AddIncidentFormOverlay(
                                                 "description" to description.text,
                                                 "picture" to imageUrl,
                                                 "postedBy" to userName,
-                                                "status" to "pending",
+                                                "status" to "Open",
                                                 "timestamp" to Timestamp.now()
                                             )
 

@@ -66,10 +66,16 @@ fun MainApp() {
                     for (doc in snapshots!!.documentChanges) {
                         if (doc.type.name == "ADDED") {
                             val data = doc.document.data
-
-                            val alertTime = (data["time"] as? com.google.firebase.Timestamp)
-                                ?.toDate()
-                                ?.time ?: 0L
+                            
+                            val alertTime = (data["time"] as? String)?.let {
+                                try {
+                                    java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+                                        .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                                        .parse(it)?.time ?: 0L
+                                } catch (ex: Exception) {
+                                    0L
+                                }
+                            } ?: 0L
 
                             if (alertTime >= appOpenTime) {
                                 fireMessage = """
@@ -146,7 +152,18 @@ fun MainApp() {
                             0 -> MainMapScreen(
                                 onMenuClick = { scope.launch { drawerState.open() } },
                                 initialDestination = destinationLatLng,
-                                initialDestinationName = destinationName
+                                initialDestinationName = destinationName,
+                                onClearDestination = {
+                                    destinationLatLng = null
+                                    destinationName = null
+                                    val currentUser = FirebaseAuth.getInstance().currentUser
+                                    if (currentUser != null) {
+                                        FirebaseFirestore.getInstance()
+                                            .collection("Users")
+                                            .document(currentUser.uid)
+                                            .update("currentDestination", null)
+                                    }
+                                }
                             )
 
                             1 -> IncidentReportScreen()
