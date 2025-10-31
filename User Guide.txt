@@ -1,0 +1,53 @@
+CamShield 🚨
+A campus safety application developed by Bytecraft for the CodeNection Hackathon 2025.
+
+CamShield helps improve campus safety through:
+- SOS emergency alerts and voice recordings
+- Walk With Me live-tracking feature
+- Incident reporting with photo proof
+- Emergency contact management
+- Admin dashboard for monitoring requests
+
+------------------------------------------------------------
+🌐 Live Demo
+Dashboard: https://camshield-50aec.web.app/
+(Hosted via Firebase)
+
+App: https://drive.google.com/drive/u/0/folders/1pNxshZLA1kHYkpITurFxQl2o9g2sTDub
+
+If the Firebase server goes down temporarily, please contact the Bytecraft team representative to restore the hosting service.
+For the app, download the app-release.apk with android devices or emulator. 
+------------------------------------------------------------
+🔑 Test Accounts
+
+👨‍💻 Admin Dashboard
+Email: admin@admin.newinti.edu.my
+Password: admin123
+
+📱 App Tester
+Email: tester@tester.newinti.edu.my
+Password: tester123
+
+🧭 Walk With Me (Companion Account)
+Email: tester123@tester.newinti.edu.my
+Password: Tester123
+
+⚠️ For demo purposes only. Please do not change credentials or delete data.
+
+------------------------------------------------------------
+📘 Documentation
+See the 'CamSHIELD user guide.pdf' file for step-by-step instructions and screenshots.
+
+------------------------------------------------------------
+🧩 Technologies Used
+- Frontend: HTML, CSS, JavaScript
+- Backend: Firebase Authentication & Firestore
+- Hosting: Firebase Hosting
+- Maps & Location: Google Maps API
+
+------------------------------------------------------------
+👥 Team Bytecraft
+- Gan Tze Sin
+- Lai Kian Siong
+- Tang Sinny
+
